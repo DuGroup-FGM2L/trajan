@@ -125,7 +125,20 @@ class BASE():
 
         return norms, idx
 
-    def write(self, data, header, outfile):
+    def write(self, data = None, header = None, outfile = None):
+        if self.__class__.write == BASE.write:
+            raise RuntimeError("Write function not defined by derived class. No output file will be generated. This is a technical issue with a particular analyzer being used.")
+
+        if data is None:
+            raise RuntimeError(f"No data provided to BASE.write by {self.__class__} analyzer. No output file will be generated. This is a technical issue with a particular analyzer being used.")
+        if header is None:
+            print(f"WARNING: the analyzer {self.__class__} did not provide the colum labels.")
+            header = ""
+
+        if outfile is None:
+            print(f"WARNING: the analyzer {self.__class__} did not provide the output file name. The defualt name ({constants.DEFAULT_OUTFILE}) will be used.")
+            outfile = constants.DEFAULT_OUTFILE
+
         np.savetxt(fname = outfile,
                    X = data,
                    delimiter = ",",

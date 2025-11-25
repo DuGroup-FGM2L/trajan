@@ -21,7 +21,7 @@ def parse_args():
 
     #parser.add_argument("-s", "--steps", help = "Pattern for specifying which steps to use", type = str)
 
-    subparsers = parser.add_subparsers(dest="command", required=True, metavar = "style", action = utils.StrictSubParsersAction)
+    subparsers = parser.add_subparsers(dest="command", required=True, metavar = "analyzer", action = utils.StrictSubParsersAction)
 
     bond_angle = subparsers.add_parser("angle", help = "Argument parser for extracting bond angle distributions from LAMMPS-generated trajectory files.", formatter_class = utils.NoMetavarHelpFormatter)
 

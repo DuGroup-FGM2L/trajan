@@ -85,7 +85,7 @@ class ANGLE(BASE):
             bond_angles.append(theta)
 
             self.verbose_print(f"{i + 1} analysis of TS {self.timesteps[i]}")
-        
+
         self.bond_angles = np.concatenate(bond_angles)
 
     def write(self):
