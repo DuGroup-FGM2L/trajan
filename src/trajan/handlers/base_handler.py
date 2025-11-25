@@ -147,5 +147,5 @@ class BASE():
                    )
 
     def analyze(self):
-        print("Handler doesnot perform any analysis.")
+        print("WARNING: Handler does not perform any analysis.")
         sys.exit(0)
