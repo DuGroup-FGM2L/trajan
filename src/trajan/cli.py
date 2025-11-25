@@ -43,6 +43,8 @@ def main():
 
     handler.analyze()
 
+    handler.statistics()
+
     handler.write()
 
 

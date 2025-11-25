@@ -147,5 +147,18 @@ class BASE():
                    )
 
     def analyze(self):
-        print("WARNING: Handler does not perform any analysis.")
+        print("WARNING: Handler does not perform any analyses.")
         sys.exit(0)
+
+
+    def statistics(self, stats_dict = None):
+        if self.__class__.statistics == BASE.statistics:
+            print(f"WARNING: Statistics function not defined by derived class {self.__class__}. Nothing to display.")
+
+        if not stats_dict is None:
+            print("\nAnalyzer statistics:\n")
+
+            for name, args in stats_dict.items():
+                value, verbosity = args
+                self.verbose_print(f"{name}: {value}", verbosity = verbosity)
+

@@ -1,5 +1,6 @@
 from .base_handler import BASE
 import numpy as np
+import scipy as sp
 
 class ANGLE(BASE):
     def __init__(self, args):
@@ -14,6 +15,8 @@ class ANGLE(BASE):
         self.wrap_positions()
 
         self.bond_angles = list()
+
+        self.angle_hist = None
 
     def analyze(self):
         bond_angles = list()
@@ -84,14 +87,65 @@ class ANGLE(BASE):
 
             bond_angles.append(theta)
 
-            self.verbose_print(f"{i + 1} analysis of TS {self.timesteps[i]}")
+            self.verbose_print(f"{i + 1} analysis of TS {self.timesteps[i]}", verbosity = 2)
 
+        print("Analysis complete")
         self.bond_angles = np.concatenate(bond_angles)
 
     def write(self):
-        counts, edges = np.histogram(self.bond_angles, bins = self.bincount)
-        centers = 0.5 * (edges[:-1] + edges[1:])
-        super().write(data = np.column_stack([centers, counts]),
-                      header = "angle, count",
+
+        super().write(data = np.column_stack((self.angle_hist, self.angle_norm_hist[:, 1])),
+                      header = "angle, count, area normalized count",
                       outfile = self.outfile,
                       )
+
+    def statistics(self):
+        counts, edges = np.histogram(self.bond_angles, bins = self.bincount)
+        centers = 0.5 * (edges[:-1] + edges[1:])
+        self.angle_hist = np.column_stack([centers, counts])
+
+        hist_min = np.min(centers)
+        hist_max = np.max(centers)
+        area_under_curve = np.sum(counts) * (hist_max - hist_min) / self.bincount
+        self.angle_norm_hist = np.column_stack([centers, counts / area_under_curve])
+
+        kde = sp.stats.gaussian_kde(self.bond_angles)
+        x_grid = np.linspace(hist_min, hist_max, self.bincount)
+        smooth_y = kde(x_grid)
+
+        #Name : (value, verbosity)
+        stats_dict = {"Mean bond angle" : (np.mean(self.bond_angles), 1),
+                      "Standard deviation" : (np.std(self.bond_angles), 1),
+        }
+
+        local_maxima_indices, _ = sp.signal.find_peaks(smooth_y)
+        local_minima_indices, _ = sp.signal.find_peaks(-smooth_y)
+        boundaries = sorted(np.concatenate(([0], local_minima_indices, [len(x_grid)-1])))
+
+        num_peaks = len(local_maxima_indices)
+
+        peaks = np.empty(shape = (num_peaks, 2))
+
+        for i in range(num_peaks):
+            idx_start = int(boundaries[i])
+            idx_end = int(boundaries[i+1])
+
+            y_slice = smooth_y[idx_start:idx_end]
+            x_slice = x_grid[idx_start:idx_end]
+
+            area = sp.integrate.simpson(y=y_slice, x=x_slice)
+
+            peak_loc = x_grid[local_maxima_indices[i]]
+            peaks[i] = np.array([peak_loc, area])
+
+        sorted_peaks = peaks[peaks[:, 1].argsort()[::-1]]
+
+
+        for peak, fraction in sorted_peaks:
+            stats_dict[f"Peak at {peak:.1f}° bond fraction"] = (fraction, 1)
+
+
+        stats_dict["Integrations bounds"] = (x_grid[boundaries], 3)
+
+
+        super().statistics(stats_dict = stats_dict)

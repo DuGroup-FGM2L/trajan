@@ -3,7 +3,7 @@ ATOMIC_MASSES = {"H":1.0079, "He":4.0026022, "Li":6.94, "Be":9.01218315, "B":10.
 GENERATION_COMMENT = "#Generated with tablegen utility https://github.com/DuGroup-FGM2L/trajan.git\n"
 
 DEFAULT_VERBOSITY = 1
-MAX_VERBOSITY = 2
+MAX_VERBOSITY = 3
 
 DEFAULT_OUTFILE = "trajan.csv"
 DEFAULT_HIST_BINCOUNT = 1000
