@@ -196,10 +196,14 @@ class BASE():
     def check_required_columns(self, *args):
         to_check = iter(args)
         found = True
-        while found:
-            arg = next(to_check)
-            if not arg in self.columns:
+        stop = False
+        while found and not stop:
+            arg = next(to_check, None)
+            if arg is None:
+                stop = True
+            elif not arg in self.columns:
                 found = False
 
-        print(f"ERROR: Per-atom field \"{arg}\" is missing in provided trajectory file ({self.trajectory}). Analyzer {self.__class__} requires {" ".join(args)} fields.")
-        sys.exit(1)
+        if not found:
+            print(f"ERROR: Per-atom field \"{arg}\" is missing in provided trajectory file ({self.trajectory}). Analyzer {self.__class__} requires {" ".join(args)} fields.")
+            sys.exit(1)
