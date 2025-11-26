@@ -12,6 +12,8 @@ class ANGLE(BASE):
 
         self.parse_file()
 
+        self.check_required_columns("type", "x", "y", "z")
+
         self.wrap_positions()
 
         self.bond_angles = list()

@@ -23,6 +23,7 @@ class DENSITY(BASE):
             sys.exit(1)
 
         self.parse_file()
+        self.check_required_columns("type")
 
         num_masses = len(self.masses)
         ntypes = len(self.types)

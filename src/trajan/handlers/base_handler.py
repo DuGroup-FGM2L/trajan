@@ -193,3 +193,13 @@ class BASE():
                 value, verbosity = args
                 self.verbose_print(f"{name}: {value}", verbosity = verbosity)
 
+    def check_required_columns(self, *args):
+        to_check = iter(args)
+        found = True
+        while found:
+            arg = next(to_check)
+            if not arg in self.columns:
+                found = False
+
+        print(f"ERROR: Per-atom field \"{arg}\" is missing in provided trajectory file ({self.trajectory}). Analyzer {self.__class__} requires {" ".join(args)} fields.")
+        sys.exit(1)

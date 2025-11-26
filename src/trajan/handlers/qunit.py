@@ -28,6 +28,8 @@ class QUNIT(BASE):
 
         self.parse_file()
 
+        self.check_required_columns("type", "x", "y", "z")
+
         max_type = np.max(self.types)
         self.interaction_matrix = np.full((max_type + 1, max_type + 1), np.inf)
 
