@@ -1,4 +1,5 @@
 from .base_handler import BASE
+from trajan import constants
 import numpy as np
 import scipy as sp
 
