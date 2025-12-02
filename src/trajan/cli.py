@@ -27,7 +27,7 @@ def parse_args():
 
     bond_angle.add_argument("types", nargs = 3, type = int, default = [1, 1, 1], help = "Integer values representing atomic types of a bonded triplet with the atom of second type in the middle.")
 
-    #bond_angle.add_argument("-m", "--maxcut", nargs ="+", type = float, default = [], help = "Maximum distance allowed for nearest species of a triplet to be considered bonded.")
+    bond_angle.add_argument("-c", "--cutoffs", nargs ="+", type = float, default = [], help = "Maximum distances allowed for nearest species of a triplet to be considered bonded.")
 
     bond_angle.add_argument("-b", "--bincount", type = int, default = constants.DEFAULT_HIST_BINCOUNT, help = f"Number of bins for the bond angle histogram. Default: {constants.DEFAULT_HIST_BINCOUNT}.")
 
@@ -46,14 +46,15 @@ def parse_args():
     density.add_argument("-u", "--units", type = str, default = constants.DEFAULT_UNITS, help = f"LAMMPS unit set for conversion. Default: {constants.DEFAULT_UNITS}.")
     density.set_defaults(handler_class = DENSITY)
 
-    if args.command is None:
-        parser.error("the following arguments are required: analyzer")
 
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+
+    if args.command is None:
+        parser.error("the following arguments are required: analyzer")
 
     handler = args.handler_class(args)
 

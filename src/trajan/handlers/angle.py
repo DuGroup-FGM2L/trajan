@@ -17,6 +17,21 @@ class ANGLE(BASE):
             self.outfile = "angle_" + self.outfile
         self.bincount = args.bincount
 
+        numcuts = len(args.cutoffs)
+        if numcuts:
+            if numcuts >= 2:
+                if numcuts == 2:
+                    print(f"WARNING: Too many cutoffs specified ({numcuts}). Recorded: C({self.types[0]}, {self.types[1]}) = {args.cutoffs[0]}, C({self.types[1]}, {self.types[2]}) = {args.cutoffs[1]}")
+                self.cutoffs = args.cutoffs[:2]
+            elif numcuts == 1:
+                if self.types[0] == self.types[2]:
+                    print("COMMENT: Only one cutoff specified but non-central bonded types are the same. Will use one cutoff for both.")
+
+                elif self.types[0] != self.types[2]:
+                    print("WARNING: Only one cutoff specified and non-central bonded types are NOT the same. Will use one cutoff for both.")
+                self.cutoffs = [args.cutoffs[0], args.cutoffs[0]]
+
+
         self.parse_file()
 
         self.check_required_columns("type", "x", "y", "z")
@@ -58,6 +73,7 @@ class ANGLE(BASE):
                         )
                 norms1, norms2 = norms.T
                 idx1, idx2 = idx.T
+
             #If types are different first neighbor of each type is needed
             else:
                 neighs2 = self.extract_positions(
@@ -81,9 +97,17 @@ class ANGLE(BASE):
                         box = self.lengths[i],
                         )
 
+            #Check against cutoffs
+            below = (norms1 < self.cutoffs[0]**2) * (norms2 < self.cutoffs[1]**2)
+
+            norms1 = norms1[below]
+            norms2 = norms2[below]
+            idx1 = idx1[below]
+            idx2 = idx2[below]
+
             #Get displacements between central atoms and each of their nearest neighbors
-            displ1 = neighs1[idx1] - central_atoms
-            displ2 = neighs2[idx2] - central_atoms
+            displ1 = neighs1[idx1] - central_atoms[below]
+            displ2 = neighs2[idx2] - central_atoms[below]
 
             #Account for periodic boundaries
             displ1 -= self.lengths[i] * np.round(displ1 / self.lengths[i])
