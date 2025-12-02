@@ -2,6 +2,10 @@ from .base_handler import BASE
 from trajan import constants
 import numpy as np
 import scipy as sp
+import scipy.integrate
+
+if not hasattr(sp.integrate, "simpson"):
+    sp.integrate.simpson = sp.integrate.simps
 
 class ANGLE(BASE):
     def __init__(self, args):
@@ -10,7 +14,7 @@ class ANGLE(BASE):
         self.types = args.types
         self.outfile = args.outfile
         if self.outfile == constants.DEFAULT_OUTFILE:
-            self.outfile += "angle_"
+            self.outfile = "angle_" + self.outfile
         self.bincount = args.bincount
 
         self.parse_file()
@@ -26,7 +30,7 @@ class ANGLE(BASE):
     def analyze(self):
         bond_angles = list()
 
-        for i in range (self.Nframes):
+        for i in range (self.get_Nframes()):
             central_atoms = self.extract_positions(
                     target_array = self.select_type(
                         type = self.types[1],
@@ -92,7 +96,7 @@ class ANGLE(BASE):
 
             bond_angles.append(theta)
 
-            self.verbose_print(f"{i + 1} analysis of TS {self.timesteps[i]}", verbosity = 2)
+            self.verbose_print(f"{i + 1} analysis of TS {self.get_timesteps()[i]}", verbosity = 2)
 
         print("Analysis complete")
         self.bond_angles = np.concatenate(bond_angles)
@@ -114,43 +118,45 @@ class ANGLE(BASE):
         area_under_curve = np.sum(counts) * (hist_max - hist_min) / self.bincount
         self.angle_norm_hist = np.column_stack([centers, counts / area_under_curve])
 
-        kde = sp.stats.gaussian_kde(self.bond_angles)
-        x_grid = np.linspace(hist_min, hist_max, self.bincount)
-        smooth_y = kde(x_grid)
 
         #Name : (value, verbosity)
         stats_dict = {"Mean bond angle" : (np.mean(self.bond_angles), 1),
                       "Standard deviation" : (np.std(self.bond_angles), 1),
         }
 
-        local_maxima_indices, _ = sp.signal.find_peaks(smooth_y)
-        local_minima_indices, _ = sp.signal.find_peaks(-smooth_y)
-        boundaries = sorted(np.concatenate(([0], local_minima_indices, [len(x_grid)-1])))
+        if self.get_verbosity() >= 3:
+            kde = sp.stats.gaussian_kde(self.bond_angles)
+            x_grid = np.linspace(hist_min, hist_max, self.bincount)
+            smooth_y = kde(x_grid)
 
-        num_peaks = len(local_maxima_indices)
+            local_maxima_indices, _ = sp.signal.find_peaks(smooth_y)
+            local_minima_indices, _ = sp.signal.find_peaks(-smooth_y)
+            boundaries = sorted(np.concatenate(([0], local_minima_indices, [len(x_grid)-1])))
 
-        peaks = np.empty(shape = (num_peaks, 2))
+            num_peaks = len(local_maxima_indices)
 
-        for i in range(num_peaks):
-            idx_start = int(boundaries[i])
-            idx_end = int(boundaries[i+1])
+            peaks = np.empty(shape = (num_peaks, 2))
 
-            y_slice = smooth_y[idx_start:idx_end]
-            x_slice = x_grid[idx_start:idx_end]
+            for i in range(num_peaks):
+                idx_start = int(boundaries[i])
+                idx_end = int(boundaries[i+1])
 
-            area = sp.integrate.simpson(y=y_slice, x=x_slice)
+                y_slice = smooth_y[idx_start:idx_end]
+                x_slice = x_grid[idx_start:idx_end]
 
-            peak_loc = x_grid[local_maxima_indices[i]]
-            peaks[i] = np.array([peak_loc, area])
+                area = sp.integrate.simpson(y=y_slice, x=x_slice)
 
-        sorted_peaks = peaks[peaks[:, 1].argsort()[::-1]]
+                peak_loc = x_grid[local_maxima_indices[i]]
+                peaks[i] = np.array([peak_loc, area])
 
-
-        for peak, fraction in sorted_peaks:
-            stats_dict[f"Peak at {peak:.1f}° bond fraction"] = (fraction, 1)
+            sorted_peaks = peaks[peaks[:, 1].argsort()[::-1]]
 
 
-        stats_dict["Integrations bounds"] = (x_grid[boundaries], 3)
+            for peak, fraction in sorted_peaks:
+                stats_dict[f"Peak at {peak:.1f}° bond fraction"] = (fraction, 3)
+
+
+            stats_dict["Integrations bounds"] = (x_grid[boundaries], 3)
 
 
         super().statistics(stats_dict = stats_dict)

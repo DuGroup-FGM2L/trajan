@@ -6,25 +6,55 @@ from trajan import constants
 
 class BASE():
     def __init__(self, filename, verbosity):
-        self.trajectory = filename
-        self.verbosity = verbosity
+        self.__trajectory = filename
+        self.__verbosity = verbosity
 
         #Per-snapshot arrays
-        self.boxes = None
-        self.box_periods = None
-        self.atom_counts = None
-        self.timesteps = None
-        self.types = None
+        self.__boxes = None
+        self.__box_periods = None
+        self.__atom_counts = None
+        self.__timesteps = None
+        self.__types = None
 
         #Per-snapshot 2D arrays
-        self.atomic_data = None
+        self.__atomic_data = None
 
         #General data
-        self.columns = dict()
-        self.Nframes = 0
+        self.__columns = dict()
+        self.__Nframes = 0
+
+    def get_trajectory(self):
+        return self.__trajectory
+
+    def get_verbosity(self):
+        return self.__verbosity
+
+    def get_boxes(self):
+        return self.__boxes
+
+    def get_box_periods(self):
+        return self.__box_periods
+
+    def get_atom_counts(self):
+        return self.__atom_counts
+
+    def get_timesteps(self):
+        return self.__timesteps
+
+    def get_types(self):
+        return self.__types
+
+    def get_atomic_data(self):
+        return self.__atomic_data
+
+    def get_columns(self):
+        return self.__columns
+
+    def get_Nframes(self):
+        return self.__Nframes
 
     def parse_file(self):
-        self.verbose_print(f"Scanning trajectory file: {self.trajectory}")
+        self.verbose_print(f"Scanning trajectory file: {self.__trajectory}")
         read_natoms = False
         read_timestep = False
         all_data = list()
@@ -40,15 +70,15 @@ class BASE():
 
         #Max timestep set for testing
         max_ts =  float("inf")
-        with open(self.trajectory, "r") as f:
+        with open(self.__trajectory, "r") as f:
             for line in f:
-                if self.Nframes > max_ts:
+                if self.__Nframes > max_ts:
                     continue
                 if "ITEM: TIMESTEP" in line:
                     read_timestep = True
                 elif read_timestep:
                     timestep = int(line.strip())
-                    self.verbose_print(f"{self.Nframes} scan of TS {timestep}", verbosity = 2)
+                    self.verbose_print(f"{self.__Nframes} scan of TS {timestep}", verbosity = 2)
                     all_timesteps.append(timestep)
                     read_timestep = False
 
@@ -80,74 +110,74 @@ class BASE():
                     all_data.append(atom_data)
                     all_boxes.append(box)
                     atom_ctr = float("inf")
-                    self.Nframes += 1
+                    self.__Nframes += 1
 
         all_data.append(atom_data)
         all_boxes.append(box)
-        self.Nframes += 1
+        self.__Nframes += 1
 
         for i, column_heading in enumerate(column_headers):
-            self.columns[column_heading] = i
+            self.__columns[column_heading] = i
 
-        self.boxes = np.array(all_boxes)
-        self.atomic_data = np.array(all_data)
-        self.atom_counts = np.array(atomic_counts)
-        self.box_periods = np.array(box_period)
-        self.timesteps = np.array(all_timesteps)
+        self.__boxes = np.array(all_boxes)
+        self.__atomic_data = np.array(all_data)
+        self.__atom_counts = np.array(atomic_counts)
+        self.__box_periods = np.array(box_period)
+        self.__timesteps = np.array(all_timesteps)
 
-        self.lengths = self.boxes[:, :, 1] - self.boxes[:, :, 0]
+        self.lengths = self.__boxes[:, :, 1] - self.__boxes[:, :, 0]
 
-        if "type" in self.columns:
-            self.types = np.sort(np.unique(self.atomic_data[..., self.columns["type"]]).astype(int))
+        if "type" in self.__columns:
+            self.__types = np.sort(np.unique(self.__atomic_data[..., self.__columns["type"]]).astype(int))
 
-        self.verbose_print(f"\nTrajectory file ({self.trajectory}) scan complete.\n")
+        self.verbose_print(f"\nTrajectory file ({self.__trajectory}) scan complete.\n")
 
     def verbose_print(self, *args, verbosity = None):
         if verbosity is None:
             verbosity = constants.DEFAULT_VERBOSITY
 
-        if verbosity <= self.verbosity:
+        if verbosity <= self.__verbosity:
             print(*args)
 
     def extract_positions(self, target_array):
-        if target_array.shape[-1] != self.atomic_data.shape[-1]:
-            raise RuntimeError(f"Cannot extract positions our of array of shape {target_array.shape} when initial data has shape {self.atomic_data.shape}")
+        if target_array.shape[-1] != self.__atomic_data.shape[-1]:
+            raise RuntimeError(f"Cannot extract positions our of array of shape {target_array.shape} when initial data has shape {self.__atomic_data.shape}")
 
-        return target_array[..., [self.columns["x"], self.columns["y"], self.columns["z"]]]
+        return target_array[..., [self.__columns["x"], self.__columns["y"], self.__columns["z"]]]
 
     def wrap_positions(self):
-        position_cols = [self.columns["x"], self.columns["y"], self.columns["z"]]
-        box_lo = self.boxes[:, None, :, 0]
+        position_cols = [self.__columns["x"], self.__columns["y"], self.__columns["z"]]
+        box_lo = self.__boxes[:, None, :, 0]
         lengths = self.lengths[:, None, :]
-        self.atomic_data[:, :, position_cols] = (self.atomic_data[:, :, position_cols] - box_lo) % lengths
+        self.__atomic_data[:, :, position_cols] = (self.__atomic_data[:, :, position_cols] - box_lo) % lengths
 
     def select_type(self, type, frame):
-        if frame < 0 or frame >= self.Nframes:
-            raise RuntimeError(f"INTERNAL ERROR (BASE.select_type): Frame out of bounds. Number of frames: {self.Nframes}. Requested frame: {frame}")
+        if frame < 0 or frame >= self.__Nframes:
+            raise RuntimeError(f"INTERNAL ERROR (BASE.select_type): Frame out of bounds. Number of frames: {self.__Nframes}. Requested frame: {frame}")
 
-        return self.atomic_data[frame][self.atomic_data[frame][:, self.columns["type"]] == type]
+        return self.__atomic_data[frame][self.__atomic_data[frame][:, self.__columns["type"]] == type]
 
     def filter_type(self, type, frame):
-        if frame < 0 or frame >= self.Nframes:
-            raise RuntimeError(f"INTERNAL ERROR (BASE.filter_type): Frame out of bounds. Number of frames: {self.Nframes}. Requested frame: {frame}")
+        if frame < 0 or frame >= self.__Nframes:
+            raise RuntimeError(f"INTERNAL ERROR (BASE.filter_type): Frame out of bounds. Number of frames: {self.__Nframes}. Requested frame: {frame}")
 
-        return self.atomic_data[frame][self.atomic_data[frame][:, self.columns["type"]] != type]
+        return self.__atomic_data[frame][self.__atomic_data[frame][:, self.__columns["type"]] != type]
 
     def select_types(self, types, frame):
-        if frame < 0 or frame >= self.Nframes:
-            raise RuntimeError(f"INTERNAL ERROR (BASE.select_types): Frame out of bounds. Number of frames: {self.Nframes}. Requested frame: {frame}")
+        if frame < 0 or frame >= self.__Nframes:
+            raise RuntimeError(f"INTERNAL ERROR (BASE.select_types): Frame out of bounds. Number of frames: {self.__Nframes}. Requested frame: {frame}")
 
-        type_column = self.atomic_data[frame][:, self.columns["type"]]
+        type_column = self.__atomic_data[frame][:, self.__columns["type"]]
 
-        return self.atomic_data[frame][np.isin(type_column, types)]
+        return self.__atomic_data[frame][np.isin(type_column, types)]
 
     def filter_types(self, types, frame):
-        if frame < 0 or frame >= self.Nframes:
-            raise RuntimeError(f"INTERNAL ERROR (BASE.filter_types): Frame out of bounds. Number of frames: {self.Nframes}. Requested frame: {frame}")
+        if frame < 0 or frame >= self.__Nframes:
+            raise RuntimeError(f"INTERNAL ERROR (BASE.filter_types): Frame out of bounds. Number of frames: {self.__Nframes}. Requested frame: {frame}")
 
-        type_column = self.atomic_data[frame][:, self.columns["type"]]
+        type_column = self.__atomic_data[frame][:, self.__columns["type"]]
 
-        return self.atomic_data[frame][~np.isin(type_column, types)]
+        return self.__atomic_data[frame][~np.isin(type_column, types)]
 
 
     def get_nclosest(self, central, neighs, N, box):
@@ -201,9 +231,9 @@ class BASE():
             arg = next(to_check, None)
             if arg is None:
                 stop = True
-            elif not arg in self.columns:
+            elif not arg in self.__columns:
                 found = False
 
         if not found:
-            print(f"ERROR: Per-atom field \"{arg}\" is missing in provided trajectory file ({self.trajectory}). Analyzer {self.__class__} requires {" ".join(args)} fields.")
+            print(f"ERROR: Per-atom field \"{arg}\" is missing in provided trajectory file ({self.__trajectory}). Analyzer {self.__class__} requires {' '.join(args)} fields.")
             sys.exit(1)

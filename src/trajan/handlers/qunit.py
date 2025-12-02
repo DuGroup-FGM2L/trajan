@@ -10,7 +10,7 @@ class QUNIT(BASE):
         self.qunits = None
         self.outfile = args.outfile
         if self.outfile == constants.DEFAULT_OUTFILE:
-            self.outfile += "qunit_"
+            self.outfile = "qunit_" + self.outfile
 
         if 0 in args.types:
             zero_index = args.types.index(0)
@@ -33,18 +33,19 @@ class QUNIT(BASE):
 
         self.check_required_columns("type", "x", "y", "z")
 
-        max_type = np.max(self.types)
+        types = self.get_types()
+        max_type = np.max(types)
         self.interaction_matrix = np.full((max_type + 1, max_type + 1), np.inf)
 
         if args.cutoffs:
             cutoff_iter = iter(args.cutoffs)
             for f in self.formers:
-                if not f in self.types:
-                    print(f"ERROR: Incorrect former type ({f}). Types present in trajectories: {" ".join(self.types.astype(str))}.")
+                if not f in types:
+                    print(f"ERROR: Incorrect former type ({f}). Types present in trajectories: {' '.join(types.astype(str))}.")
                     sys.exit(1)
                 for c in self.connectors:
-                    if not c in self.types:
-                        print(f"ERROR: Incorrect connector type ({c}). Types present in trajectories: {" ".join(self.types.astype(str))}.")
+                    if not c in types:
+                        print(f"ERROR: Incorrect connector type ({c}). Types present in trajectories: {' '.join(types.astype(str))}.")
                         sys.exit(1)
                     cut = next(cutoff_iter)
                     self.interaction_matrix[f, c] = cut
@@ -58,7 +59,9 @@ class QUNIT(BASE):
     def analyze(self):
         total_formers = 0
         all_coordinations = list()
-        for i in range (self.Nframes):
+        timesteps = self.get_timesteps()
+        columns = self.get_columns()
+        for i in range (self.get_Nframes()):
             former_atoms = self.select_types(
                     types = self.formers,
                     frame = i,
@@ -79,7 +82,7 @@ class QUNIT(BASE):
                     frame = i,
             )
 
-            network_connector_types = network_connectors[:, self.columns["type"]].astype(int)
+            network_connector_types = network_connectors[:, columns["type"]].astype(int)
 
             network_connector_positions = self.extract_positions(target_array = network_connectors)
 
@@ -90,7 +93,7 @@ class QUNIT(BASE):
                 box = self.lengths[i],
             )
 
-            neigh_types = non_connectors[idx][..., self.columns["type"]].astype(int)
+            neigh_types = non_connectors[idx][..., columns["type"]].astype(int)
 
 
             cutoff_grid = self.interaction_matrix[network_connector_types[:, None], neigh_types]
@@ -98,16 +101,16 @@ class QUNIT(BASE):
             distance_mask = norms <= cutoff_grid
             idx = idx[distance_mask.all(axis = 1)]
             neigh_data = non_connectors[idx]
-            neigh_types = neigh_data[..., self.columns["type"]].astype(int)
+            neigh_types = neigh_data[..., columns["type"]].astype(int)
 
             neigh_is_former = np.isin(neigh_types, self.formers)
             both_neighs_former = neigh_is_former.all(axis = 1)
 
-            bridging_neighs = neigh_data[..., self.columns["id"]][both_neighs_former]
+            bridging_neighs = neigh_data[..., columns["id"]][both_neighs_former]
             unique_ids, counts = np.unique(bridging_neighs, return_counts = True)
             all_coordinations.append(counts)
 
-            self.verbose_print(f"{i + 1} analysis of TS {self.timesteps[i]}", verbosity = 2)
+            self.verbose_print(f"{i + 1} analysis of TS {timesteps[i]}", verbosity = 2)
 
         self.all_coordinations = np.concatenate(all_coordinations)
         unique_coords, counts = np.unique(self.all_coordinations, return_counts = True)
