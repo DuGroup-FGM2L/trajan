@@ -95,7 +95,7 @@ class ANGLE(BASE):
                         )
 
             #Check against cutoffs
-            below = (norms1 < self.cutoffs[0]**2) * (norms2 < self.cutoffs[1]**2)
+            below = (norms1 < self.cutoffs[0]) * (norms2 < self.cutoffs[1])
 
             norms1 = norms1[below]
             norms2 = norms2[below]

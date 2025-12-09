@@ -3,7 +3,7 @@ import numpy as np
 from scipy.spatial import cKDTree
 import argparse
 
-from .handlers import ANGLE, QUNIT, DENSITY
+from .handlers import ANGLE, QUNIT, DENSITY, RDFS
 
 from . import constants
 from . import utils
@@ -45,6 +45,14 @@ def parse_args():
     density.add_argument("elements", nargs = "+", type = str, default = [], help = "Space separated list of element names for each type present in the trajectory file. In case a custom mass has been used a numerical value can be specified. Example: Si 15.799 Na 0.2")
     density.add_argument("-u", "--units", type = str, default = constants.DEFAULT_UNITS, help = f"LAMMPS unit set for conversion. Default: {constants.DEFAULT_UNITS}.")
     density.set_defaults(handler_class = DENSITY)
+
+
+    pair_distribution = subparsers.add_parser("rdf", help = "Argument parser for raidal pair distribution function calculations from LAMMPS-generated trajectory files.", formatter_class = utils.NoMetavarHelpFormatter)
+    pair_distribution.add_argument("-c", "--cutoff", type = float, help = f"Maximum atomic separation distance considered for the generation of the radial distribution functions. Default: {constants.DEFAULT_RDF_CUTOFF}", default = constants.DEFAULT_RDF_CUTOFF)
+    pair_distribution.add_argument("-p", "--pair", nargs = 2, type = int, action = "append", help = "Atomic type pairs for selecting specific partial distribution functions.\n Repeat for multiple pairs: -p 1 2 -p 3 4")
+    pair_distribution.add_argument("-b", "--bincount", type = int, default = constants.DEFAULT_HIST_BINCOUNT, help = f"Number of bins for the radial distribution functions. Default: {constants.DEFAULT_HIST_BINCOUNT}.")
+    pair_distribution.add_argument("-bs", "--batch-size", type = int, default = constants.DEFAULT_ATOM_BATCH, help = f"Number of atoms whose neighbors are analyzed at a time. Default: {constants.DEFAULT_ATOM_BATCH}.\n Helpful to avoid memory overload when analyzing large systems.")
+    pair_distribution.set_defaults(handler_class = RDFS)
 
 
     return parser.parse_args()

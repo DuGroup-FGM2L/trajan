@@ -21,3 +21,6 @@ MASS_CONVERSIONS = {"real" : 1.660539056e-24,
 DISTANCE_CONVERSIONS = {"real": 1e-8,
                         "metal": 1e-8,
 }
+
+DEFAULT_RDF_CUTOFF = 10 #A
+DEFAULT_ATOM_BATCH = 1000

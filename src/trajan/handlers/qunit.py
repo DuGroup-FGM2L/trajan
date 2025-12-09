@@ -48,8 +48,8 @@ class QUNIT(BASE):
                         print(f"ERROR: Incorrect connector type ({c}). Types present in trajectories: {' '.join(types.astype(str))}.")
                         sys.exit(1)
                     cut = next(cutoff_iter)
-                    self.interaction_matrix[f, c] = cut*cut
-                    self.interaction_matrix[c, f] = cut*cut
+                    self.interaction_matrix[f, c] = cut
+                    self.interaction_matrix[c, f] = cut
 
 
 

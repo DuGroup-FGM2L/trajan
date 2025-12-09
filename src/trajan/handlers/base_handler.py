@@ -53,6 +53,7 @@ class BASE():
     def get_Nframes(self):
         return self.__Nframes
 
+
     def parse_file(self):
         self.verbose_print(f"Scanning trajectory file: {self.__trajectory}")
         read_natoms = False
@@ -70,6 +71,7 @@ class BASE():
 
         #Max timestep set for testing
         max_ts =  float("inf")
+        max_ts =  100
         with open(self.__trajectory, "r") as f:
             for line in f:
                 if self.__Nframes > max_ts:
@@ -112,9 +114,10 @@ class BASE():
                     atom_ctr = float("inf")
                     self.__Nframes += 1
 
-        all_data.append(atom_data)
-        all_boxes.append(box)
-        self.__Nframes += 1
+        if self.__Nframes < max_ts:
+            all_data.append(atom_data)
+            all_boxes.append(box)
+            self.__Nframes += 1
 
         for i, column_heading in enumerate(column_headers):
             self.__columns[column_heading] = i
