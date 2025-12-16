@@ -42,11 +42,10 @@ class ANGLE(BASE):
     def analyze(self):
         bond_angles = list()
 
-        for i in range (self.get_Nframes()):
+        for frame_idx in self.trajectory_reader():
             central_atoms = self.extract_positions(
                     target_array = self.select_type(
                         type = self.types[1],
-                        frame = i,
                         ),
                     )
 
@@ -54,7 +53,6 @@ class ANGLE(BASE):
             neighs1 = self.extract_positions(
                     target_array = self.select_type(
                         type = self.types[0],
-                        frame = i,
                         ),
                     )
 
@@ -66,7 +64,6 @@ class ANGLE(BASE):
                         central = central_atoms,
                         neighs = neighs1,
                         N = 2,
-                        box = self.lengths[i],
                         )
                 norms1, norms2 = norms.T
                 idx1, idx2 = idx.T
@@ -76,7 +73,6 @@ class ANGLE(BASE):
                 neighs2 = self.extract_positions(
                     target_array = self.select_type(
                         type = self.types[2],
-                        frame = i,
                         ),
                     )
 
@@ -84,14 +80,12 @@ class ANGLE(BASE):
                         central = central_atoms,
                         neighs = neighs1,
                         N = 1,
-                        box = self.lengths[i],
                         )
 
                 norms2, idx2 = self.get_nclosest(
                         central = central_atoms,
                         neighs = neighs2,
                         N = 1,
-                        box = self.lengths[i],
                         )
 
             #Check against cutoffs
@@ -107,8 +101,9 @@ class ANGLE(BASE):
             displ2 = neighs2[idx2] - central_atoms[below]
 
             #Account for periodic boundaries
-            displ1 -= self.lengths[i] * np.round(displ1 / self.lengths[i])
-            displ2 -= self.lengths[i] * np.round(displ2 / self.lengths[i])
+            lengths = self.get_lengths()
+            displ1 -= lengths * np.round(displ1 / lengths)
+            displ2 -= lengths * np.round(displ2 / lengths)
 
 
             dotproduct = np.sum(displ1 * displ2, axis=1)
@@ -117,7 +112,7 @@ class ANGLE(BASE):
 
             bond_angles.append(theta)
 
-            self.verbose_print(f"{i + 1} analysis of TS {self.get_timesteps()[i]}", verbosity = 2)
+            self.verbose_print(f"{frame_idx + 1} analysis of TS {self.get_timestep()}", verbosity = 2)
 
         print("Analysis complete")
         self.bond_angles = np.concatenate(bond_angles)

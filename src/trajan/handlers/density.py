@@ -40,28 +40,26 @@ class DENSITY(BASE):
 
         self.masses = np.concatenate(([0], self.masses))
 
-        self.wrap_positions()
-
         self.densities = list()
 
     def analyze(self):
-        atomic_data = self.get_atomic_data()
         columns = self.get_columns()
-        for i in range (self.get_Nframes()):
-            all_types = atomic_data[i][:, columns["type"]].astype(int)
+        for frame_idx in self.trajectory_reader():
+            atomic_data = self.get_atomic_data()
+            all_types = atomic_data[:, columns["type"]].astype(int)
             all_masses = self.masses[all_types]
-            density = np.sum(all_masses) / (np.prod(self.lengths[i])) #amu/A^3
+            density = np.sum(all_masses) / (np.prod(self.get_lengths())) #amu/A^3
             density *= constants.MASS_CONVERSIONS[self.units] / np.power(constants.DISTANCE_CONVERSIONS[self.units], 3)
             self.densities.append(density)
 
-            self.verbose_print(f"{i + 1} analysis of TS {self.get_timesteps()[i]}", verbosity = 2)
+            self.verbose_print(f"{frame_idx + 1} analysis of TS {self.get_timestep()}", verbosity = 2)
 
         self.densities = np.array(self.densities)
         print("Analysis complete")
 
     def write(self):
 
-        super().write(data = np.column_stack((np.arange(1, self.get_timesteps().shape[0] + 1), self.get_timesteps(), self.densities)),
+        super().write(data = np.column_stack((np.arange(1, self.get_frame() + 1), self.get_timesteps(), self.densities)),
                       header = "frame, time step, density",
                       outfile = self.outfile,
                       )

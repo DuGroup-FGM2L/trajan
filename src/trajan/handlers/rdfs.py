@@ -5,12 +5,14 @@ import sys
 import scipy as sp
 import scipy.signal
 import scipy.integrate
+import scipy.spatial
 
 class RDFS(BASE):
     def __init__(self, args):
         super().__init__(args.file, args.verbose)
 
         self.cutoff = args.cutoff
+        self.cutsq = self.cutoff**2
         self.nbins = args.bincount
 
         self.outfile = args.outfile
@@ -19,6 +21,8 @@ class RDFS(BASE):
 
         self.parse_file()
         self.check_required_columns("type", "x", "y", "z")
+
+        self.wrap_positions()
 
         if args.total:
             self.calc_total = True
@@ -70,10 +74,6 @@ class RDFS(BASE):
 
 
     def analyze(self):
-        timesteps = self.get_timesteps()
-        boxes = self.get_boxes()
-        sides = np.diff(boxes, axis = -1).reshape((-1, 3))
-        volumes = np.prod(sides, axis = -1)
         self.bins = np.linspace(0, self.cutoff, self.nbins)
         self.hist_counts = np.zeros(shape = (self.pairs.shape[0], self.bins.size - 1), dtype = np.int64)
         r_inner = self.bins[:-1]
@@ -81,50 +81,93 @@ class RDFS(BASE):
         self.edges = (r_outer + r_inner)/2
         shell_volumes = (4/3) * np.pi * (r_outer**3 - r_inner**3)
         self.g_r = np.zeros(shape = (self.pairs.shape[0], self.bins.size - 1), dtype = np.float64)
-        Nframes = self.get_Nframes()
-        #For T(r) calculations
-        type_counts = np.zeros(shape = (Nframes, np.max(self.pairs + 1)))
+        n1_rho2 = np.zeros(shape = (self.pairs.shape[0], ), dtype = np.float64)
 
-        for pair_idx, pair in enumerate(self.pairs):
-            n1_rho2 = 0
-            self.verbose_print(f"Calculating distribution for pair: {pair[0]} {pair[1]}", verbosity = 2)
-            for i in range (Nframes):
-                atoms1 = self.extract_positions(self.select_type(type = pair[0], frame = i))
-                atoms2 = self.extract_positions(self.select_type(type = pair[1], frame = i))
+        bin_width = self.cutoff / self.nbins
+        inv_bin_width = 1.0 / bin_width
+
+        #For T(r) calculations
+        type_bound = np.max(self.pairs) + 1
+        all_type_fractions = list()
+        number_density = 0
+
+        for frame_idx in self.trajectory_reader():
+            type_counts = np.zeros(shape = (type_bound, ))
+            lengths = self.get_lengths()
+            inv_lengths = 1.0 / lengths
+            volume = np.prod(lengths)
+            natoms = self.get_natoms()
+            number_density += natoms / volume
+
+            frame_coords = dict()
+            for t in np.unique(self.pairs):
+                frame_coords[t] = self.extract_positions(self.select_type(t))
+
+            for pair_idx, pair in enumerate(self.pairs):
+                self.verbose_print(f"Calculating distribution for pair: {pair[0]} {pair[1]}", verbosity = 2)
+                atoms1 = frame_coords[pair[0]]
+                atoms2 = frame_coords[pair[1]]
+
+                if atoms1 is None or atoms2 is None:
+                    continue
+
                 n1 = atoms1.shape[0]
                 n2 = atoms2.shape[0]
 
-                type_counts[i][pair[0]] = n1
-                type_counts[i][pair[1]] = n2
 
-                for btch_idx in range(0, n1, self.batch_size):
-                    batch_atoms1 = atoms1[btch_idx : btch_idx + self.batch_size]
-                    delta = batch_atoms1[:, np.newaxis, :] - atoms2[np.newaxis, :, :]
-                    delta -= sides[i] * np.around(delta / sides[i])
-                    square_dist = np.sum(delta**2, axis = 2)
-                    square_dist = square_dist[square_dist <= self.cutoff**2]
+                type_counts[pair[0]] = n1
+                type_counts[pair[1]] = n2
+
+                for i in range(0, n1, self.batch_size):
+                    batch_a1 = atoms1[i : i + self.batch_size]
+
+                    delta = batch_a1[:, 0, None] - atoms2[None, :, 0]
+                    delta -= lengths[0] * np.rint(delta * inv_lengths[0])
+                    d2 = delta**2
+
+                    delta = batch_a1[:, 1, None] - atoms2[None, :, 1]
+                    delta -= lengths[1] * np.rint(delta * inv_lengths[1])
+                    d2 += delta**2
+
+                    delta = batch_a1[:, 2, None] - atoms2[None, :, 2]
+                    delta -= lengths[2] * np.rint(delta * inv_lengths[2])
+                    d2 += delta**2
+
+                    d2 = d2.ravel()
+
+                    mask = d2 <= self.cutsq
+
                     if pair[0] == pair[1]:
-                        square_dist = square_dist[square_dist > 0]
-                    dists = np.sqrt(square_dist)
-                    counts, _ = np.histogram(dists, bins = self.bins)
-                    self.hist_counts[pair_idx] += counts
+                        mask &= (d2 > 1e-8)
 
-                n1_rho2 += n1 * n2/volumes[i]
+                    valid_d2 = d2[mask]
 
-                self.verbose_print(f"{i + 1} analysis of TS {timesteps[i]}", verbosity = 3)
+                    if valid_d2.size > 0:
+                        dists = np.sqrt(valid_d2)
 
-            self.g_r[pair_idx] += self.hist_counts[pair_idx] / (shell_volumes * n1_rho2)
+                        bin_indices = (dists * inv_bin_width).astype(np.int32)
+
+                        bin_indices = bin_indices[bin_indices < self.nbins - 1]
+
+                        counts = np.bincount(bin_indices, minlength = self.nbins - 1)
+                        self.hist_counts[pair_idx] += counts
+
+
+                n1_rho2[pair_idx] += n1 * n2/volume
+
+            self.verbose_print(f"{frame_idx + 1} analysis of TS {self.get_timestep()}", verbosity = 3)
+            all_type_fractions.append(type_counts / natoms)
+
+        self.g_r += self.hist_counts / (shell_volumes[np.newaxis, :] * n1_rho2[:, np.newaxis])
 
         if self.calc_total:
-            total_atoms = self.get_atom_counts()
-            fractions = np.mean(type_counts/total_atoms[:, np.newaxis], axis = 0)
-            number_density = np.mean(total_atoms/volumes)
-
-            average_scat = np.sum(fractions * self.scat_lengths)
+            all_type_fractions = np.array(all_type_fractions)
+            number_density /= self.get_frame() + 1
+            average_scat = np.sum(all_type_fractions * self.scat_lengths)
             g_weighted_sum = np.zeros_like(self.edges)
 
             for pid, pair in enumerate(self.pairs):
-                weight = np.prod(fractions[pair]) * np.prod(self.scat_lengths[pair])
+                weight = np.prod(all_type_fractions[pair]) * np.prod(self.scat_lengths[pair])
                 if pair[0] != pair[1]:
                     weight *= 2
                 g_weighted_sum += weight * self.g_r[pid]
@@ -185,99 +228,3 @@ class RDFS(BASE):
 
         super().statistics(stats_dict = stats_dict)
 
-"""
-import numpy as np
-
-def calculate_neutron_total_T_r(partials, r_axis, density_rho0):
-    Combines partial g(r)s into the Total Correlation Function T(r)
-    as seen in Neutron Diffraction.
-    
-    Parameters:
-    -----------
-    partials : dict
-        A dictionary containing your calculated g(r) arrays.
-        Keys should be tuples like ('Si', 'O'), ('O', 'O').
-        Values are the numpy arrays of g(r).
-    r_axis : np.array
-        The r (distance) array corresponding to the g(r)s.
-    density_rho0 : float
-        Total number density (Total Atoms / Box Volume) in atoms/Angstrom^3.
-        
-    Returns:
-    --------
-    T_r : np.array
-        The Total Correlation Function.
-    G_total : np.array
-        The weighted Total Radial Distribution Function.
-    
-    # 1. Define Neutron Scattering Lengths (in femtometers or arbitrary units)
-    # These are physical constants.
-    b = {
-        'Si': 4.149,
-        'O':  5.803,
-        'Na': 3.63
-    }
-    
-    # 2. Define Concentrations (c_i = N_i / N_total)
-    # You need to adjust these based on your specific glass composition
-    # Example for Na2O-2SiO2 (NS2)
-    total_atoms = 2 + 1 + 2 + 4 # 2Na, 1O, 2Si, 4O -> Na2Si2O5
-    c = {
-        'Si': 2 / 9.0,
-        'Na': 2 / 9.0,
-        'O':  5 / 9.0
-    }
-    
-    # Initialize the sum
-    g_weighted_sum = np.zeros_like(r_axis)
-    normalization_factor = 0.0
-    
-    # 3. Sum the weighted partials
-    # Formula: G_tot(r) = [ sum(ci * cj * bi * bj * g_ij(r)) ] / [ sum(ci * bi) ]^2
-    
-    # First, calculate the denominator (average scattering length squared)
-    avg_b = sum(c[atom] * b[atom] for atom in c)
-    denominator = avg_b**2
-    
-    print("Combining partials...")
-    
-    # Iterate through all unique pairs expected in the partials dict
-    # Note: Ensure your partials dict has both ('Si', 'O') and ('O', 'Si') 
-    # or handle the symmetry here. usually g_ij = g_ji.
-    pairs = [('Si', 'Si'), ('Si', 'O'), ('Si', 'Na'),
-             ('O', 'O'),   ('O', 'Na'), ('Na', 'Na')]
-             
-    for atom1, atom2 in pairs:
-        key = (atom1, atom2)
-        
-        if key in partials:
-            g_partial = partials[key]
-        elif (atom2, atom1) in partials:
-            g_partial = partials[(atom2, atom1)]
-        else:
-            print(f"Warning: Missing partial for {key}. Assuming 0.")
-            g_partial = np.zeros_like(r_axis)
-
-        # Weighting factor w_ij
-        # If i == j: weight = c_i * c_i * b_i * b_i
-        # If i != j: weight = 2 * c_i * c_j * b_i * b_j (The 2 accounts for i-j and j-i symmetry)
-        
-        weight = c[atom1] * c[atom2] * b[atom1] * b[atom2]
-        if atom1 != atom2:
-            weight *= 2
-            
-        g_weighted_sum += weight * g_partial
-        
-    # 4. Calculate G_total (The Neutron Weighted g(r))
-    G_total = g_weighted_sum / denominator
-    
-    # 5. Calculate T(r)
-    # T(r) = 4 * pi * r * rho0 * G_total(r)
-    T_r = 4 * np.pi * r_axis * density_rho0 * G_total
-    
-    # Optional: Calculate the baseline T^0(r) shown in your image
-    # This is the straight line slope
-    T_zero = 4 * np.pi * r_axis * density_rho0
-    
-    return T_r, T_zero, G_total
-"""

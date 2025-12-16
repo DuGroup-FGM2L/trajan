@@ -59,19 +59,16 @@ class QUNIT(BASE):
     def analyze(self):
         total_formers = 0
         all_coordinations = list()
-        timesteps = self.get_timesteps()
         columns = self.get_columns()
-        for i in range (self.get_Nframes()):
+        for frame_idx in self.trajectory_reader():
             former_atoms = self.select_types(
                     types = self.formers,
-                    frame = i,
                 )
 
             total_formers += former_atoms.shape[0]
 
             non_connectors = self.filter_types(
                 types = self.connectors,
-                frame = i,
             )
 
 
@@ -79,7 +76,6 @@ class QUNIT(BASE):
 
             network_connectors = self.select_types(
                     types = self.connectors,
-                    frame = i,
             )
 
             network_connector_types = network_connectors[:, columns["type"]].astype(int)
@@ -90,7 +86,6 @@ class QUNIT(BASE):
                 central = network_connector_positions,
                 neighs = non_connector_positions,
                 N = 2,
-                box = self.lengths[i],
             )
 
             neigh_types = non_connectors[idx][..., columns["type"]].astype(int)
@@ -110,7 +105,7 @@ class QUNIT(BASE):
             unique_ids, counts = np.unique(bridging_neighs, return_counts = True)
             all_coordinations.append(counts)
 
-            self.verbose_print(f"{i + 1} analysis of TS {timesteps[i]}", verbosity = 2)
+            self.verbose_print(f"{frame_idx + 1} analysis of TS {self.get_timestep()}", verbosity = 2)
 
         self.all_coordinations = np.concatenate(all_coordinations)
         unique_coords, counts = np.unique(self.all_coordinations, return_counts = True)

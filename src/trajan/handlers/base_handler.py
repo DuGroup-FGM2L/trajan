@@ -9,19 +9,22 @@ class BASE():
         self.__trajectory = filename
         self.__verbosity = verbosity
 
-        #Per-snapshot arrays
-        self.__boxes = None
+        self.__box = None
+        self.__lengths = None
         self.__box_periods = None
-        self.__atom_counts = None
-        self.__timesteps = None
+        self.__natoms = None
+        self.__timestep = None
         self.__types = None
 
-        #Per-snapshot 2D arrays
         self.__atomic_data = None
 
         #General data
         self.__columns = dict()
-        self.__Nframes = 0
+        self.__frame = 0
+
+        self.__wrap_positions = False
+
+        self.__timesteps = list()
 
     def get_trajectory(self):
         return self.__trajectory
@@ -29,14 +32,20 @@ class BASE():
     def get_verbosity(self):
         return self.__verbosity
 
-    def get_boxes(self):
-        return self.__boxes
+    def get_box(self):
+        return self.__box
+
+    def get_lengths(self):
+        return self.__lengths
 
     def get_box_periods(self):
         return self.__box_periods
 
-    def get_atom_counts(self):
-        return self.__atom_counts
+    def get_natoms(self):
+        return self.__natoms
+
+    def get_timestep(self):
+        return self.__timestep
 
     def get_timesteps(self):
         return self.__timesteps
@@ -50,90 +59,105 @@ class BASE():
     def get_columns(self):
         return self.__columns
 
-    def get_Nframes(self):
-        return self.__Nframes
-
+    def get_frame(self):
+        return self.__frame
 
     def parse_file(self):
-        self.verbose_print(f"Scanning trajectory file: {self.__trajectory}")
-        read_natoms = False
-        read_timestep = False
-        all_data = list()
-        all_boxes = list()
-        all_timesteps = list()
-        atom_counts = list()
-        atomic_counts = list()
-        box_period = list()
-        column_headers = list()
-        box_ctr = float("inf")
-        atom_ctr = float("inf")
-        natoms = 0
+        self.verbose_print(f"Peeking at trajectory file: {self.__trajectory}", verbosity = 2)
 
-        #Max timestep set for testing
-        max_ts =  float("inf")
-        #max_ts =  1
+        iterator = self.trajectory_reader(run_once = True)
+        try:
+            next(iterator)
+        except StopIteration:
+            raise RuntimeError("File seems empty or invalid.")
+
+        self.verbose_print(f"Metadata scan complete. Columns found: {list(self.__columns.keys())}", verbosity = 2)
+
+
+    def trajectory_reader(self, run_once = False):
+        if not run_once:
+            self.verbose_print(f"Scanning trajectory file: {self.__trajectory}")
+
+        read_timestep = False
+        read_natoms = False
+        read_box = False
+        read_atoms = False
+
+        box_lines = list()
+        atom_lines = list()
+
+        self.__frame = 0
+        self.__timesteps = list()
+
         with open(self.__trajectory, "r") as f:
             for line in f:
-                if self.__Nframes > max_ts:
-                    continue
                 if "ITEM: TIMESTEP" in line:
+                    if read_atoms and len(atom_lines) > 0:
+                        self._postprocess(atom_lines)
+                        yield self.__frame
+
+                        self.__frame += 1
+                        if run_once:
+                            return
+
                     read_timestep = True
+                    read_atoms = False
+                    atom_lines = list()
+                    box_lines = list()
+
                 elif read_timestep:
-                    timestep = int(line.strip())
-                    self.verbose_print(f"{self.__Nframes} scan of TS {timestep}", verbosity = 2)
-                    all_timesteps.append(timestep)
+                    self.__timestep = int(line.strip())
+                    self.verbose_print(f"{self.__frame} scan of TS {self.__timestep}", verbosity = 2)
                     read_timestep = False
 
-                if "ITEM: NUMBER OF ATOMS" in line:
+                elif "ITEM: NUMBER OF ATOMS" in line:
                     read_natoms = True
                 elif read_natoms:
                     natoms = int(line.strip())
+                    self.__natoms = natoms
                     read_natoms = False
-                    atomic_counts.append(natoms)
 
-                if "ITEM: BOX BOUNDS" in line:
-                    box = np.empty((3, 2))
-                    box_ctr = 0
-                    box_period.append([line.split()[-3:]])
-                elif box_ctr < 3:
-                    box[box_ctr] = np.fromstring(line, sep = " ", count = 2)
-                    box_ctr += 1
+                elif "ITEM: BOX BOUNDS" in line:
+                    read_box = True
+                    self.__box_periods = line.split()[-3:]
+                elif read_box:
+                    box_lines.append(line)
+                    if len(box_lines) == 3:
+                        self.__box = np.array([np.fromstring(l, sep=" ", count=2) for l in box_lines])
+                        read_box = False
+
+                elif "ITEM: ATOMS" in line:
+                    read_atoms = True
+                    if not self.__columns:
+                        for i, h in enumerate(line.split()[2:]):
+                            self.__columns[h] = i
+                elif read_atoms:
+                    atom_lines.append(line)
+
+        if len(atom_lines) > 0:
+            self._postprocess(atom_lines)
+            yield self.__frame
+
+            self.__frame += 1
 
 
-                if "ITEM: ATOMS" in line:
-                    atom_ctr = 0
-                    max_type = -np.inf
-                    atom_data = list()
-                    column_headers = line.split()[2:]
-                elif atom_ctr < natoms:
-                    atom_data.append(np.fromstring(line, sep = " "))
-                    atom_ctr += 1
-                elif atom_ctr == natoms:
-                    all_data.append(atom_data)
-                    all_boxes.append(box)
-                    atom_ctr = float("inf")
-                    self.__Nframes += 1
-
-        if self.__Nframes < max_ts:
-            all_data.append(atom_data)
-            all_boxes.append(box)
-            self.__Nframes += 1
-
-        for i, column_heading in enumerate(column_headers):
-            self.__columns[column_heading] = i
-
-        self.__boxes = np.array(all_boxes)
-        self.__atomic_data = np.array(all_data)
-        self.__atom_counts = np.array(atomic_counts)
-        self.__box_periods = np.array(box_period)
-        self.__timesteps = np.array(all_timesteps)
-
-        self.lengths = self.__boxes[:, :, 1] - self.__boxes[:, :, 0]
-
-        if "type" in self.__columns:
-            self.__types = np.sort(np.unique(self.__atomic_data[..., self.__columns["type"]]).astype(int))
 
         self.verbose_print(f"\nTrajectory file ({self.__trajectory}) scan complete.\n")
+
+    def _postprocess(self, atom_lines):
+        self.__atomic_data = np.loadtxt(atom_lines)
+
+        self.__lengths = self.__box[:, 1] - self.__box[:, 0]
+
+        if self.__wrap_positions:
+            self._position_wrapper()
+
+
+        if "type" in self.__columns.keys():
+            self.__types = np.sort(np.unique(self.__atomic_data[:, self.__columns["type"]]).astype(int))
+
+        self.__timesteps.append(self.__timestep)
+
 
     def verbose_print(self, *args, verbosity = None):
         if verbosity is None:
@@ -149,42 +173,32 @@ class BASE():
         return target_array[..., [self.__columns["x"], self.__columns["y"], self.__columns["z"]]]
 
     def wrap_positions(self):
+        self.__wrap_positions = True
+
+    def _position_wrapper(self):
         position_cols = [self.__columns["x"], self.__columns["y"], self.__columns["z"]]
-        box_lo = self.__boxes[:, None, :, 0]
-        lengths = self.lengths[:, None, :]
-        self.__atomic_data[:, :, position_cols] = (self.__atomic_data[:, :, position_cols] - box_lo) % lengths
+        box_lo = self.__box[:, 0]
+        self.__atomic_data[:, position_cols] = (self.__atomic_data[:, position_cols] - box_lo) % self.__lengths
 
-    def select_type(self, type, frame):
-        if frame < 0 or frame >= self.__Nframes:
-            raise RuntimeError(f"INTERNAL ERROR (BASE.select_type): Frame out of bounds. Number of frames: {self.__Nframes}. Requested frame: {frame}")
+    def select_type(self, type):
+        return self.__atomic_data[self.__atomic_data[:, self.__columns["type"]] == type]
 
-        return self.__atomic_data[frame][self.__atomic_data[frame][:, self.__columns["type"]] == type]
+    def filter_type(self, type):
+        return self.__atomic_data[self.__atomic_data[:, self.__columns["type"]] != type]
 
-    def filter_type(self, type, frame):
-        if frame < 0 or frame >= self.__Nframes:
-            raise RuntimeError(f"INTERNAL ERROR (BASE.filter_type): Frame out of bounds. Number of frames: {self.__Nframes}. Requested frame: {frame}")
+    def select_types(self, types):
+        type_column = self.__atomic_data[:, self.__columns["type"]]
 
-        return self.__atomic_data[frame][self.__atomic_data[frame][:, self.__columns["type"]] != type]
+        return self.__atomic_data[np.isin(type_column, types)]
 
-    def select_types(self, types, frame):
-        if frame < 0 or frame >= self.__Nframes:
-            raise RuntimeError(f"INTERNAL ERROR (BASE.select_types): Frame out of bounds. Number of frames: {self.__Nframes}. Requested frame: {frame}")
+    def filter_types(self, types):
+        type_column = self.__atomic_data[:, self.__columns["type"]]
 
-        type_column = self.__atomic_data[frame][:, self.__columns["type"]]
-
-        return self.__atomic_data[frame][np.isin(type_column, types)]
-
-    def filter_types(self, types, frame):
-        if frame < 0 or frame >= self.__Nframes:
-            raise RuntimeError(f"INTERNAL ERROR (BASE.filter_types): Frame out of bounds. Number of frames: {self.__Nframes}. Requested frame: {frame}")
-
-        type_column = self.__atomic_data[frame][:, self.__columns["type"]]
-
-        return self.__atomic_data[frame][~np.isin(type_column, types)]
+        return self.__atomic_data[~np.isin(type_column, types)]
 
 
-    def get_nclosest(self, central, neighs, N, box):
-        kdtree = sp.spatial.cKDTree(neighs, boxsize = box)
+    def get_nclosest(self, central, neighs, N):
+        kdtree = sp.spatial.cKDTree(neighs, boxsize = self.__lengths)
         norms, idx = kdtree.query(central, k = N)
 
         return norms, idx
