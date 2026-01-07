@@ -4,9 +4,24 @@ import numpy as np
 import sys
 import collections
 
+try:
+    from mpi4py import MPI
+    HAS_MPI = True
+except ImportError:
+    HAS_MPI = False
+
 class RINGS(BASE):
     def __init__(self, args):
-        super().__init__(args.file, args.verbose, args.steps)
+        paral_frame = not args.paral_mode.lower().startswith("a")
+        super().__init__(args.file, args.verbose, args.steps, paral_frame = paral_frame)
+
+
+        self.comm = self.get_comm()
+        self.rank = self.get_rank()
+        self.size = self.get_size()
+
+        if paral_frame and self.size > 1:
+            self.verbose_print("WARNING: Frame parallelization not yet implemented. Will run in atom parallelization mode.")
 
         self.outfile = args.outfile
         if self.outfile == constants.DEFAULT_OUTFILE:
@@ -17,7 +32,7 @@ class RINGS(BASE):
             self.base = np.array(args.types[:zero_index])
             self.connectors = np.array(args.types[zero_index + 1:])
         else:
-            print("ERROR: There must be a separating 0 in atom types. Please refer to the help message for the ring size analyzer.")
+            self.verbose_print("ERROR: There must be a separating 0 in atom types. Please refer to the help message for the ring size analyzer.")
             sys.exit(1)
 
         algo_letter = args.algorithm[0].lower()
@@ -32,7 +47,7 @@ class RINGS(BASE):
         ncuts = len(args.cutoffs)
 
         if args.cutoffs and ncuts != nbase * nconnectors:
-            print(f"ERROR: number of cutoffs ({ncuts}) is not equal to the number of base ({nbase}) atoms times the number of connector atoms ({nconnectors}).")
+            self.verbose_print(f"ERROR: number of cutoffs ({ncuts}) is not equal to the number of base ({nbase}) atoms times the number of connector atoms ({nconnectors}).")
             sys.exit(1)
 
         self.parse_file()
@@ -47,11 +62,11 @@ class RINGS(BASE):
             cutoff_iter = iter(args.cutoffs)
             for b in self.base:
                 if not b in types:
-                    print(f"ERROR: Incorrect base atom type ({b}). Types present in trajectories: {' '.join(types.astype(str))}.")
+                    self.verbose_print(f"ERROR: Incorrect base atom type ({b}). Types present in trajectories: {' '.join(types.astype(str))}.")
                     sys.exit(1)
                 for c in self.connectors:
                     if not c in types:
-                        print(f"ERROR: Incorrect connector type ({c}). Types present in trajectories: {' '.join(types.astype(str))}.")
+                        self.verbose_print(f"ERROR: Incorrect connector type ({c}). Types present in trajectories: {' '.join(types.astype(str))}.")
                         sys.exit(1)
                     cut = next(cutoff_iter)
                     self.interaction_matrix[b, c] = cut
@@ -61,11 +76,11 @@ class RINGS(BASE):
         nconbonds = len(self.conbonds)
         if nconbonds < nconnectors:
             if self.conbonds:
-                print(f"WARNING: Number of connectors supplied ({nconnectors}) is not the same as the number of connector bonds arguments ({nconbonds}). Only the first {nconbonds} onnectors will have non default values.")
+                self.verbose_print(f"WARNING: Number of connectors supplied ({nconnectors}) is not the same as the number of connector bonds arguments ({nconbonds}). Only the first {nconbonds} onnectors will have non default values.")
             for i in range(nconnectors - nconbonds):
                 self.conbonds.append(constants.DEFAULT_CONNECTOR_BONDS)
         elif nconbonds > nconnectors:
-            print(f"WARNING: Too many connector bond arguments provided. Only the first ({nconnectors}) arguments will be used.")
+            self.verbose_print(f"WARNING: Too many connector bond arguments provided. Only the first ({nconnectors}) arguments will be used.")
             self.conbonds = self.conbonds[:nconnectors]
 
         self.conbonds = np.array(self.conbonds)
@@ -80,92 +95,138 @@ class RINGS(BASE):
 
 
     def analyze(self):
-        columns = self.get_columns()
-        for frame_idx in self.trajectory_reader():
-            num_each_type = self.get_num_each_type()
-            num_neighs = int(2 * np.sum(num_each_type[self.connectors] * self.conbonds) / np.sum(num_each_type[self.base]))
-            base_atoms = self.select_types(types = self.base)
-            base_atom_positions = self.extract_positions(base_atoms)
+        if self.rank == 0:
+            reader = self.trajectory_reader()
+            columns = self.get_columns()
 
-            num_base_atoms = base_atoms.shape[0]
+        done = False
+        while not done:
+            frame_data_bundle = None
+            status = "CONTINUE"
+            if self.rank == 0:
+                try:
+                    frame_idx = next(reader)
 
-            frame_graph = np.full(shape = (num_base_atoms, num_neighs), fill_value = -1)
-            neighs_recorder = np.zeros(shape = (num_base_atoms, ), dtype = np.int32)
+                    num_each_type = self.get_num_each_type()
+                    num_neighs = int(2 * np.sum(num_each_type[self.connectors] * self.conbonds) / np.sum(num_each_type[self.base]))
+                    base_atoms = self.select_types(types = self.base)
+                    base_atom_positions = self.extract_positions(base_atoms)
 
-            for cid, connector in enumerate(self.connectors):
-                target_connectors = self.select_types(types = self.connectors)
-                target_connector_positions = self.extract_positions(target_connectors)
-                connector_types = target_connectors[:, columns["type"]].astype(int)
+                    num_base_atoms = base_atoms.shape[0]
 
-                numbonds = self.conbonds[cid]
-                norms, idx = self.get_nclosest(
-                    central = target_connector_positions,
-                    neighs = base_atom_positions,
-                    N = numbonds,
-                )
+                    frame_graph = np.full(shape = (num_base_atoms, num_neighs), fill_value = -1)
+                    neighs_recorder = np.zeros(shape = (num_base_atoms, ), dtype = np.int32)
 
-                base_types = base_atoms[idx][..., columns["type"]].astype(int)
-                cutoff_grid = self.interaction_matrix[connector_types[:, None], base_types]
+                    for cid, connector in enumerate(self.connectors):
+                        target_connectors = self.select_types(types = self.connectors)
+                        target_connector_positions = self.extract_positions(target_connectors)
+                        connector_types = target_connectors[:, columns["type"]].astype(int)
 
-                distance_mask = norms <= cutoff_grid
-                idx = idx[distance_mask.all(axis = 1)]
+                        numbonds = self.conbonds[cid]
+                        norms, idx = self.get_nclosest(
+                            central = target_connector_positions,
+                            neighs = base_atom_positions,
+                            N = numbonds,
+                        )
 
+                        base_types = base_atoms[idx][..., columns["type"]].astype(int)
+                        cutoff_grid = self.interaction_matrix[connector_types[:, None], base_types]
 
-                #Implement frame graph expansion if truly needed
-
-                sources = list()
-                targets = list()
-
-                #Create flat lists of base atoms connected through a connector
-                for i in range(numbonds):
-                    for j in range(numbonds):
-                        if i == j: continue
-                        sources.append(idx[:, i])
-                        targets.append(idx[:, j])
-
-                all_sources = np.concatenate(sources)
-                all_targets = np.concatenate(targets)
-
-                sort_order = np.argsort(all_sources)
-                all_sources = all_sources[sort_order]
-                all_targets = all_targets[sort_order]
-
-                #Find at which index repetition starts
-                unique_atoms, start_indices = np.unique(all_sources, return_index = True)
-                #Calculate how many source atoms repeated (num of neighs for each base)
-                neigh2add = np.diff(np.append(start_indices, len(all_sources)))
-
-                #Get relative position of each target atom in original graph
-                group_offsets = np.repeat(start_indices, neigh2add)
-                relcol = np.arange(len(all_sources)) - group_offsets
-
-                #Fetch how many neighbors each base atom has already
-                shift = neighs_recorder[all_sources]
-                #Shift relative column positions for new neighbors
-                relcol = relcol + shift
-                if np.max(relcol) >= num_neighs:
-                    new_frame_graph = np.zeroes((num_base_atoms, num_neighs * 2), dtype = np.int32)
-                    new_frame_graph[:, num_neighs] = frame_graph
-                    num_neighs *= 2
-                    frame_graph = new_frame_graph
-
-                frame_graph[all_sources, relcol] = all_targets
-
-                neighs_recorder[unique_atoms] += neigh2add
+                        distance_mask = norms <= cutoff_grid
+                        idx = idx[distance_mask.all(axis = 1)]
 
 
-            ring_participation_counts = self.algo(frame_graph, frame = frame_idx)
+                        sources = list()
+                        targets = list()
+
+                        #Create flat lists of base atoms connected through a connector
+                        for i in range(numbonds):
+                            for j in range(numbonds):
+                                if i == j: continue
+                                sources.append(idx[:, i])
+                                targets.append(idx[:, j])
+
+                        all_sources = np.concatenate(sources)
+                        all_targets = np.concatenate(targets)
+
+                        sort_order = np.argsort(all_sources)
+                        all_sources = all_sources[sort_order]
+                        all_targets = all_targets[sort_order]
+
+                        #Find at which index repetition starts
+                        unique_atoms, start_indices = np.unique(all_sources, return_index = True)
+                        #Calculate how many source atoms repeated (num of neighs for each base)
+                        neigh2add = np.diff(np.append(start_indices, len(all_sources)))
+
+                        #Get relative position of each target atom in original graph
+                        group_offsets = np.repeat(start_indices, neigh2add)
+                        relcol = np.arange(len(all_sources)) - group_offsets
+
+                        #Fetch how many neighbors each base atom has already
+                        shift = neighs_recorder[all_sources]
+                        #Shift relative column positions for new neighbors
+                        relcol = relcol + shift
+
+                        #Allocate more memory for new neighbors
+                        if np.max(relcol) >= num_neighs:
+                            new_frame_graph = np.zeroes((num_base_atoms, num_neighs * 2), dtype = np.int32)
+                            new_frame_graph[:, num_neighs] = frame_graph
+                            num_neighs *= 2
+                            frame_graph = new_frame_graph
+
+                        frame_graph[all_sources, relcol] = all_targets
+
+                        neighs_recorder[unique_atoms] += neigh2add
 
 
-            self.all_rings.append(np.mean(ring_participation_counts, axis = 0))
-            self.verbose_print(f"{frame_idx} analysis of TS {self.get_timestep()}", verbosity = 2)
+                    timestep = self.get_timestep()
+                    frame_data_bundle = {
+                        'graph': frame_graph,
+                        'n_atoms': num_base_atoms,
+                        'frame_idx': frame_idx,
+                        'timestep': timestep,
+                    }
 
-        self.all_rings = np.array(self.all_rings)
+                except StopIteration:
+                    done = True
+
+            if HAS_MPI: done = self.comm.bcast(done, root = 0)
+            if not done:
+                if HAS_MPI:
+                    data = self.comm.bcast(frame_data_bundle, root = 0)
+
+                    frame_graph = data["graph"]
+                    num_base_atoms = data["n_atoms"]
+                    frame_idx = data["frame_idx"]
+                    timestep = data["timestep"]
+
+                    if self.rank == 0:
+                        atom_indices = np.arange(num_base_atoms, dtype = np.int32)
+                        chunks = np.array_split(atom_indices, self.size)
+                    else:
+                        chunks = None
+
+                    my_atoms = self.comm.scatter(chunks, root = 0)
+                else:
+                    my_atoms = range(num_base_atoms)
+
+                my_counts = self.algo(frame_graph, frame = frame_idx, atom_inds = my_atoms)
+
+                ring_participation_counts = self.comm.reduce(my_counts, op=MPI.SUM, root=0)
 
 
-        print("Analysis complete")
 
-    def smallest_rings(self, frame_graph, frame):
+                if self.rank == 0:
+                    self.all_rings.append(np.mean(ring_participation_counts, axis = 0))
+
+                self.verbose_print(f"{frame_idx} analysis of TS {timestep}", verbosity = 2)
+
+        if self.rank == 0:
+            self.all_rings = np.array(self.all_rings)
+
+        self.verbose_print("Analysis complete")
+
+    def smallest_rings(self, frame_graph, frame, atom_inds):
         num_base_atoms = frame_graph.shape[0]
         ring_participation_counts = np.zeros(shape = (num_base_atoms, self.max_depth + 1))
         visited_token = np.full(num_base_atoms, fill_value = -1, dtype = np.int32)
@@ -175,8 +236,8 @@ class RINGS(BASE):
 
         queue = collections.deque()
 
-        for start_node in range(num_base_atoms):
-            self.verbose_print(f"{100*start_node/num_base_atoms:.2f}% of timestep {timestep} (frame {frame})", verbosity = 3)
+        for start_node in atom_inds:
+            self.verbose_print(f"{self.size*100*start_node/num_base_atoms:.2f}% of timestep {timestep} (frame {frame})", verbosity = 3)
 
             if frame_graph[start_node, 0] == -1:
                 continue
@@ -237,7 +298,7 @@ class RINGS(BASE):
 
         return ring_participation_counts
 
-    def primitive_rings(self, frame_graph, frame):
+    def primitive_rings(self, frame_graph, frame, atom_inds):
         num_base_atoms = frame_graph.shape[0]
 
         ring_participation_counts = np.zeros(shape=(num_base_atoms, self.max_depth + 1))
@@ -252,8 +313,8 @@ class RINGS(BASE):
         search_limit = (self.max_depth // 2) + 1
         timestep = self.get_timestep()
 
-        for start_node in range(num_base_atoms):
-            self.verbose_print(f"{100*start_node/num_base_atoms:.2f}% of timestep {timestep} (frame {frame})", verbosity = 3)
+        for start_node in atom_inds:
+            self.verbose_print(f"{self.size*100*start_node/num_base_atoms:.2f}% of timestep {timestep} (frame {frame})", verbosity = 3)
             if frame_graph[start_node, 0] == -1:
                 continue
 
@@ -381,11 +442,14 @@ class RINGS(BASE):
                       )
 
     def statistics(self):
-        self.mean_rings = np.mean(self.all_rings, axis = 0)
-        self.deviations = np.std(self.all_rings, axis = 0)
-        #Name : (value, verbosity)
-        stats_dict = {"Average ring size" : (np.sum(self.ring_values * self.mean_rings / np.sum(self.mean_rings)), 1),
-        }
+        if self.rank == 0:
+            self.mean_rings = np.mean(self.all_rings, axis = 0)
+            self.deviations = np.std(self.all_rings, axis = 0)
+            #Name : (value, verbosity)
+            stats_dict = {"Average ring size" : (np.sum(self.ring_values * self.mean_rings / np.sum(self.mean_rings)), 1),
+            }
 
 
-        super().statistics(stats_dict = stats_dict)
+            super().statistics(stats_dict = stats_dict)
+        else:
+            self.mean_rings = np.zeros_like(self.ring_values)

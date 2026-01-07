@@ -68,6 +68,7 @@ def parse_args():
     ring_size.add_argument("-cb", "--connector-bonds", type = int, nargs = "+", default = [], help = f"Space separated list of integers that specifies the number of nearest neighbors that are considered bonded for each connector. Default: {constants.DEFAULT_CONNECTOR_BONDS}")
     ring_size.add_argument("-m", "--max-size", type = int, default = constants.DEFAULT_MAX_RING_SIZE, help = f"Maximum detectable ring size. Default: {constants.DEFAULT_MAX_RING_SIZE}")
     ring_size.add_argument("-a", "--algorithm", type = str, default = constants.DEFAULT_RING_ALGORITHM, help = f"Switch between p (primitive) and s (smallest) ring detecting algorithm. Default: {constants.DEFAULT_RING_ALGORITHM}.")
+    ring_size.add_argument("-p", "--paral-mode", type = str, default = constants.DEFAULT_PARAL_MODE, help = f"MPI Parallelization strategy. 'atom': Rank 0 reads/builds graph, all Ranks search rings. 'frame': Ranks process different frames independently. Default: {constants.DEFAULT_PARAL_MODE}. Note: Ignored for single processor runs.")
     ring_size.set_defaults(handler_class = RINGS)
 
     args = parser.parse_args()

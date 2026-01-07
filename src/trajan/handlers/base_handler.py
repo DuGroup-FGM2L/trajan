@@ -2,11 +2,17 @@ import numpy as np
 import scipy as sp
 import sys
 
+try:
+    from mpi4py import MPI
+    HAS_MPI = True
+except ImportError:
+    HAS_MPI = False
+
 from trajan import constants
 from trajan import utils
 
 class BASE():
-    def __init__(self, filename, verbosity, steps):
+    def __init__(self, filename, verbosity, steps, paral_frame):
         self.__trajectory = filename
         self.__verbosity = verbosity
         self.__steps = steps
@@ -28,6 +34,24 @@ class BASE():
         self.__wrap_positions = False
 
         self.__timesteps = list()
+
+        if HAS_MPI:
+            self.__comm = MPI.COMM_WORLD
+            self.__rank = self.__comm.Get_rank()
+            self.__size = self.__comm.Get_size()
+        else:
+            self.__rank = 0
+            self.__size = 1
+            self.__comm = None
+
+    def get_comm(self):
+        return self.__comm
+
+    def get_rank(self):
+        return self.__rank
+
+    def get_size(self):
+        return self.__size
 
     def get_trajectory(self):
         return self.__trajectory
@@ -195,6 +219,9 @@ class BASE():
 
 
     def verbose_print(self, *args, verbosity = None):
+        if self.__rank != 0:
+            return
+
         if verbosity is None:
             verbosity = constants.DEFAULT_VERBOSITY
 
@@ -239,6 +266,9 @@ class BASE():
         return norms, idx
 
     def write(self, data = None, header = None, outfile = None):
+        if self.__rank != 0:
+            return
+
         if self.__class__.write == BASE.write:
             raise RuntimeError("Write function not defined by derived class. No output file will be generated. This is a technical issue with a particular analyzer being used.")
 
