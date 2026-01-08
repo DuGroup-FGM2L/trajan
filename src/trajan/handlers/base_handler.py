@@ -13,7 +13,7 @@ from trajan import constants
 from trajan import utils
 
 class BASE():
-    def __init__(self, filename, verbosity, steps, paral_frame):
+    def __init__(self, filename, verbosity, steps, paral_frame = True):
         self.__trajectory = filename
         self.__verbosity = verbosity
         self.__steps = steps
