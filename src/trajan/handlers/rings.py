@@ -256,7 +256,7 @@ class RINGS(BASE):
                 else:
                     my_atoms = range(num_original_base)
 
-                my_counts = self.algo(frame_graph, frame = frame_idx, atom_inds = my_atoms)
+                my_counts = self.algo(frame_graph, frame = frame_idx, atom_inds = my_atoms, original_atom_count = num_original_base)
 
                 if HAS_MPI:
                     ring_participation_counts = self.comm.reduce(my_counts, op=MPI.SUM, root=0)
@@ -275,9 +275,8 @@ class RINGS(BASE):
 
         self.verbose_print("Analysis complete")
 
-    def smallest_rings(self, frame_graph, frame, atom_inds):
-        num_base_atoms = frame_graph.shape[0]
-        ring_participation_counts = np.zeros(shape = (num_base_atoms, self.max_depth + 1))
+    def smallest_rings(self, frame_graph, frame, atom_inds, original_atom_count):
+        ring_participation_counts = np.zeros(shape = (original_atom_count, self.max_depth + 1))
         visited_token = np.full(num_base_atoms, fill_value = -1, dtype = np.int32)
         dist = np.zeros(num_base_atoms, dtype = np.int32)
         parent = np.full(num_base_atoms, fill_value = -1, dtype = np.int32)
@@ -348,10 +347,10 @@ class RINGS(BASE):
 
         return ring_participation_counts
 
-    def primitive_rings(self, frame_graph, frame, atom_inds):
+    def primitive_rings(self, frame_graph, frame, atom_inds, original_atom_count):
         num_base_atoms = frame_graph.shape[0]
 
-        ring_participation_counts = np.zeros(shape=(num_base_atoms, self.max_depth + 1))
+        ring_participation_counts = np.zeros(shape=(original_atom_count, self.max_depth + 1))
 
         visited_token = np.full(num_base_atoms, fill_value=-1, dtype=np.int32)
         dist = np.zeros(num_base_atoms, dtype=np.int32)
