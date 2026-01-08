@@ -23,7 +23,7 @@ class DENSITY(BASE):
             self.units = args.units
         else:
             unitstr = '\n'.join(constants.AVAILABLE_UNITS)
-            print(f"ERROR: Unit set \"{args.units}\" is not supported. Please choose out of available unit sets: \n\n{unitstr}\n")
+            self.verbose_print(f"ERROR: Unit set \"{args.units}\" is not supported. Please choose out of available unit sets: \n\n{unitstr}\n")
             sys.exit(1)
 
         self.parse_file()
@@ -33,10 +33,10 @@ class DENSITY(BASE):
         types = self.get_types()
         ntypes = len(types)
         if num_masses < ntypes:
-            print(f"ERROR: Not enough masses given ({num_masses}) for all types ({' '.join(types.astype(str))}) present.")
+            self.verbose_print(f"ERROR: Not enough masses given ({num_masses}) for all types ({' '.join(types.astype(str))}) present.")
             sys.exit(1)
         elif num_masses > ntypes:
-            print(f"WARNING: Too many masses given ({num_masses}) for all types ({' '.join(types.astype(str))}) present.")
+            self.verbose_print(f"WARNING: Too many masses given ({num_masses}) for all types ({' '.join(types.astype(str))}) present.")
 
         self.masses = np.concatenate(([0], self.masses))
 
@@ -52,14 +52,14 @@ class DENSITY(BASE):
             density *= constants.MASS_CONVERSIONS[self.units] / np.power(constants.DISTANCE_CONVERSIONS[self.units], 3)
             self.densities.append(density)
 
-            self.verbose_print(f"{frame_idx + 1} analysis of TS {self.get_timestep()}", verbosity = 2)
+            self.verbose_print(f"{frame_idx} analysis of TS {self.get_timestep()}", verbosity = 2)
 
         self.densities = np.array(self.densities)
-        print("Analysis complete")
+        self.verbose_print("Analysis complete")
 
     def write(self):
 
-        super().write(data = np.column_stack((np.arange(1, self.get_frame()), self.get_timesteps(), self.densities)),
+        super().write(data = np.column_stack((np.arange(1, self.get_user_frame()), self.get_timesteps(), self.densities)),
                       header = "frame, time step, density",
                       outfile = self.outfile,
                       )

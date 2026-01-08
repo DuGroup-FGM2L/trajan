@@ -31,6 +31,7 @@ class BASE():
         #General data
         self.__columns = dict()
         self.__frame = 0
+        self.__user_frame = 0
 
         self.__wrap_positions = False
 
@@ -90,6 +91,9 @@ class BASE():
     def get_frame(self):
         return self.__frame
 
+    def get_user_frame(self):
+        return self.__user_frame
+
     def get_num_each_type(self):
         return self.__num_each_type
 
@@ -144,6 +148,8 @@ class BASE():
                     record_this_step = (self.__frame >= start) and (self.__frame < stop) and ((self.__frame - start) % step == 0)
                     if not record_this_step:
                         read_timestep = False
+                    else:
+                        self.__user_frame += 1
 
                     self.__frame += 1
 
@@ -191,7 +197,7 @@ class BASE():
 
         if len(atom_lines) > 0:
             self._postprocess(atom_lines)
-            yield self.__frame
+            yield self.__frame - 1
 
             self.__frame += 1
 
