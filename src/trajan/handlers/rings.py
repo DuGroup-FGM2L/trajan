@@ -93,8 +93,39 @@ class RINGS(BASE):
 
         self.wrap_positions()
 
+    def build_supercell(self, positions, types, max_dist):
+        box = self.get_lengths()
+        
+        n_repeats = np.ceil(max_dist / box).astype(int)
+        
+        x_range = range(-n_repeats[0], n_repeats[0] + 1)
+        y_range = range(-n_repeats[1], n_repeats[1] + 1)
+        z_range = range(-n_repeats[2], n_repeats[2] + 1)
+
+        
+        translations = []
+        for x in x_range:
+            for y in y_range:
+                for z in z_range:
+                    if x == 0 and y == 0 and z == 0: continue
+                    translations.append(np.array([x, y, z]) * box)
+        
+        translations = np.array(translations)
+        
+        # 1. Start with original atoms (Indices 0 to N-1)
+        super_pos = [positions]
+        super_types = [types]
+        
+        # 2. Append all images
+        for trans in translations:
+            super_pos.append(positions + trans)
+            super_types.append(types)
+            
+        return np.concatenate(super_pos), np.concatenate(super_types)
+
 
     def analyze(self):
+        max_search_dist = (self.max_depth + 1) * np.max(self.interaction_matrix[np.isfinite(self.interaction_matrix)]) * 2
         if self.rank == 0:
             reader = self.trajectory_reader()
             columns = self.get_columns()
@@ -102,38 +133,43 @@ class RINGS(BASE):
         done = False
         while not done:
             frame_data_bundle = None
-            status = "CONTINUE"
             if self.rank == 0:
                 try:
                     frame_idx = next(reader)
 
                     num_each_type = self.get_num_each_type()
                     num_neighs = int(2 * np.sum(num_each_type[self.connectors] * self.conbonds) / np.sum(num_each_type[self.base]))
-                    base_atoms = self.select_types(types = self.base)
-                    base_atom_positions = self.extract_positions(base_atoms)
 
-                    num_base_atoms = base_atoms.shape[0]
+                    orig_base_atoms = self.select_types(types = self.base)
+                    orig_base_pos = self.extract_positions(orig_base_atoms)
+                    orig_base_types = orig_base_atoms[..., columns["type"]].astype(int)
+                 
+                    num_original_base = orig_base_atoms.shape[0]
 
-                    frame_graph = np.full(shape = (num_base_atoms, num_neighs), fill_value = -1)
-                    neighs_recorder = np.zeros(shape = (num_base_atoms, ), dtype = np.int32)
+                    sc_base_pos, sc_base_types = self.build_supercell(orig_base_pos, orig_base_types, max_search_dist)
+
+                    num_sc_base = sc_base_pos.shape[0]
+
+                    frame_graph = np.full(shape = (num_sc_base, num_neighs), fill_value = -1)
+                    neighs_recorder = np.zeros(shape = (num_sc_base, ), dtype = np.int32)
 
                     for cid, connector in enumerate(self.connectors):
-                        target_connectors = self.select_types(types = self.connectors)
-                        target_connector_positions = self.extract_positions(target_connectors)
-                        connector_types = target_connectors[:, columns["type"]].astype(int)
+                        orig_conn_atoms = self.select_type(connector)
+                        orig_conn_pos = self.extract_positions(orig_conn_atoms)
+                        orig_conn_types = orig_conn_atoms[..., columns["type"]].astype(int)
+                        sc_conn_pos, sc_conn_types = self.build_supercell(orig_conn_pos, orig_conn_types, max_search_dist)
 
                         numbonds = self.conbonds[cid]
                         norms, idx = self.get_nclosest(
-                            central = target_connector_positions,
-                            neighs = base_atom_positions,
+                            central = sc_conn_pos,
+                            neighs = sc_base_pos,
                             N = numbonds,
+                            use_pbc = False,
                         )
 
-                        base_types = base_atoms[idx][..., columns["type"]].astype(int)
-                        cutoff_grid = self.interaction_matrix[connector_types[:, None], base_types]
+                        cutoff_grid = self.interaction_matrix[sc_conn_types[:, None], sc_base_types[idx]]
 
                         distance_mask = norms <= cutoff_grid
-                        idx = idx[distance_mask.all(axis = 1)]
 
 
                         sources = list()
@@ -143,11 +179,19 @@ class RINGS(BASE):
                         for i in range(numbonds):
                             for j in range(numbonds):
                                 if i == j: continue
-                                sources.append(idx[:, i])
-                                targets.append(idx[:, j])
+
+                                valid_pairs_mask = distance_mask[:, i] & distance_mask[:, j]
+                                sources.append(idx[valid_pairs_mask, i])
+                                targets.append(idx[valid_pairs_mask, j])
 
                         all_sources = np.concatenate(sources)
                         all_targets = np.concatenate(targets)
+
+                        if all_sources.size == 0 or all_targets.size == 0:
+                            self.verbose_print("ERROR: No atoms are connected. Faild to construct a proper graph.")
+                            sys.exit(1)
+
+
 
                         sort_order = np.argsort(all_sources)
                         all_sources = all_sources[sort_order]
@@ -168,10 +212,12 @@ class RINGS(BASE):
                         relcol = relcol + shift
 
                         #Allocate more memory for new neighbors
-                        if np.max(relcol) >= num_neighs:
-                            new_frame_graph = np.zeroes((num_base_atoms, num_neighs * 2), dtype = np.int32)
-                            new_frame_graph[:, num_neighs] = frame_graph
-                            num_neighs *= 2
+                        max_new_numneigh = np.max(relcol)
+                        if max_new_numneigh >= num_neighs:
+                            extend_to = max_new_numneigh * 2
+                            new_frame_graph = np.full((num_sc_base, extend_to), fill_value = -1, dtype = np.int32)
+                            new_frame_graph[:, :num_neighs] = frame_graph
+                            num_neighs = extend_to
                             frame_graph = new_frame_graph
 
                         frame_graph[all_sources, relcol] = all_targets
@@ -182,7 +228,7 @@ class RINGS(BASE):
                     timestep = self.get_timestep()
                     frame_data_bundle = {
                         'graph': frame_graph,
-                        'n_atoms': num_base_atoms,
+                        'n_atoms': num_original_base,
                         'frame_idx': frame_idx,
                         'timestep': timestep,
                     }
@@ -196,23 +242,26 @@ class RINGS(BASE):
                     data = self.comm.bcast(frame_data_bundle, root = 0)
 
                     frame_graph = data["graph"]
-                    num_base_atoms = data["n_atoms"]
+                    num_original_base = data["n_atoms"]
                     frame_idx = data["frame_idx"]
                     timestep = data["timestep"]
 
                     if self.rank == 0:
-                        atom_indices = np.arange(num_base_atoms, dtype = np.int32)
+                        atom_indices = np.arange(num_original_base, dtype = np.int32)
                         chunks = np.array_split(atom_indices, self.size)
                     else:
                         chunks = None
 
                     my_atoms = self.comm.scatter(chunks, root = 0)
                 else:
-                    my_atoms = range(num_base_atoms)
+                    my_atoms = range(num_original_base)
 
                 my_counts = self.algo(frame_graph, frame = frame_idx, atom_inds = my_atoms)
 
-                ring_participation_counts = self.comm.reduce(my_counts, op=MPI.SUM, root=0)
+                if HAS_MPI:
+                    ring_participation_counts = self.comm.reduce(my_counts, op=MPI.SUM, root=0)
+                else:
+                    ring_participation_counts = my_counts
 
 
 
@@ -236,8 +285,9 @@ class RINGS(BASE):
 
         queue = collections.deque()
 
-        for start_node in atom_inds:
-            self.verbose_print(f"{self.size*100*start_node/num_base_atoms:.2f}% of timestep {timestep} (frame {frame})", verbosity = 3)
+        chunk_length = len(atom_inds)
+        for atom_ord, start_node in enumerate(atom_inds):
+            self.verbose_print(f"{100*atom_ord/chunk_length:.2f}% of timestep {timestep} (frame {frame})", verbosity = 3)
 
             if frame_graph[start_node, 0] == -1:
                 continue
@@ -313,8 +363,9 @@ class RINGS(BASE):
         search_limit = (self.max_depth // 2) + 1
         timestep = self.get_timestep()
 
-        for start_node in atom_inds:
-            self.verbose_print(f"{self.size*100*start_node/num_base_atoms:.2f}% of timestep {timestep} (frame {frame})", verbosity = 3)
+        chunk_length = len(atom_inds)
+        for atom_ord, start_node in enumerate(atom_inds):
+            self.verbose_print(f"{100*atom_ord/chunk_length:.2f}% of timestep {timestep} (frame {frame})", verbosity = 3)
             if frame_graph[start_node, 0] == -1:
                 continue
 

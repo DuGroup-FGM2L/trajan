@@ -8,6 +8,7 @@ try:
 except ImportError:
     HAS_MPI = False
 
+
 from trajan import constants
 from trajan import utils
 
@@ -228,6 +229,8 @@ class BASE():
         if verbosity <= self.__verbosity:
             print(*args)
 
+        sys.stdout.flush()
+
     def extract_positions(self, target_array):
         if target_array.shape[-1] != self.__atomic_data.shape[-1]:
             raise RuntimeError(f"Cannot extract positions our of array of shape {target_array.shape} when initial data has shape {self.__atomic_data.shape}")
@@ -259,8 +262,9 @@ class BASE():
         return self.__atomic_data[~np.isin(type_column, types)]
 
 
-    def get_nclosest(self, central, neighs, N):
-        kdtree = sp.spatial.cKDTree(neighs, boxsize = self.__lengths)
+    def get_nclosest(self, central, neighs, N, use_pbc = True):
+        box = self.__lengths if use_pbc else None
+        kdtree = sp.spatial.cKDTree(neighs, boxsize = box)
         norms, idx = kdtree.query(central, k = N)
 
         return norms, idx
