@@ -92,12 +92,13 @@ class RDFS(BASE):
         number_density = 0
 
         for frame_idx in self.trajectory_reader():
-            type_counts = np.zeros(shape = (type_bound, ))
+            current_type_counts = self.get_num_each_type()
             lengths = self.get_lengths()
             inv_lengths = 1.0 / lengths
             volume = np.prod(lengths)
             natoms = self.get_natoms()
             number_density += natoms / volume
+            type_fractions += current_type_counts / natoms
 
             frame_coords = dict()
             for t in np.unique(self.pairs):
@@ -115,8 +116,6 @@ class RDFS(BASE):
                 n2 = atoms2.shape[0]
 
 
-                type_counts[pair[0]] += n1
-                type_counts[pair[1]] += n2
 
                 for i in range(0, n1, self.batch_size):
                     batch_a1 = atoms1[i : i + self.batch_size]
@@ -153,10 +152,13 @@ class RDFS(BASE):
                         self.hist_counts[pair_idx] += counts
 
 
-                n1_rho2[pair_idx] += n1 * n2/volume
+                if pair[0] == pair[1]:
+                    n1_rho2[pair_idx] += n1 * (n2 - 1) / volume
+                else:
+                    n1_rho2[pair_idx] += n1 * n2 / volume
+
 
             self.verbose_print(f"{frame_idx} analysis of TS {self.get_timestep()}", verbosity = 2)
-            type_fractions += type_counts / natoms
 
         self.g_r += self.hist_counts / (shell_volumes[np.newaxis, :] * n1_rho2[:, np.newaxis])
 

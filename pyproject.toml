@@ -12,7 +12,7 @@ build-backend = "hatchling.build"
 ###############################################################################
 [project]
 name            = "lammps-trajan"
-version         = "0.0.5"
+version         = "0.0.6"
 description     = "LAMMPS trajectory file analysis utility"
 readme          = "README.md"
 requires-python = ">=3.6"
@@ -70,6 +70,6 @@ trajan = "trajan.cli:main"
 #  Project URLs (PyPI sidebar links)
 ###############################################################################
 [project.urls]
-Homepage   = "https://github.com/superde1fin/trajan"
+Homepage   = "https://github.com/DuGroup-FGM2L/trajan"
 Source     = "https://github.com/superde1fin/trajan"
 Issues     = "https://github.com/superde1fin/trajan/issues"
