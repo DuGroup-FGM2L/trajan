@@ -25,7 +25,7 @@ def parse_args():
 
     parser.add_argument("-o", "--outfile", help = f"Name of the ouput data file", type = str, default = constants.DEFAULT_OUTFILE)
 
-    parser.add_argument("-s", "--steps", help = "Frame selection pattern (e.g., '10:*' or '0:1000:10'). Default: *:*:1", type = str, default = "*:*:1")
+    parser.add_argument("-s", "--steps", help = "Frame selection pattern (e.g., '10:' or '0:1000:10'). Default: ::1", type = str, default = "::1")
 
     subparsers = parser.add_subparsers(dest="command", required = True, metavar = "analyzer", action = utils.StrictSubParsersAction)
 
