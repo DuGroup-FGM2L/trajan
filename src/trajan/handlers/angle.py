@@ -6,7 +6,7 @@ import scipy.integrate
 
 class ANGLE(BASE):
     def __init__(self, args):
-        super().__init__(args.file, args.verbose, args.steps)
+        super().__init__(args.file, args.verbose, args.steps, args.buffer)
 
         self.types = args.types
         self.outfile = args.outfile

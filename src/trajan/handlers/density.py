@@ -5,7 +5,7 @@ import sys
 
 class DENSITY(BASE):
     def __init__(self, args):
-        super().__init__(args.file, args.verbose, args.steps)
+        super().__init__(args.file, args.verbose, args.steps, args.buffer)
 
         self.masses = list()
         for el in args.elements:

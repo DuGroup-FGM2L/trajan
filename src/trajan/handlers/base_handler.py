@@ -13,10 +13,12 @@ from trajan import constants
 from trajan import utils
 
 class BASE():
-    def __init__(self, filename, verbosity, steps, paral_frame = True):
+    def __init__(self, filename, verbosity, steps, buffer_mb, paral_frame = True):
         self.__trajectory = filename
         self.__verbosity = verbosity
         self.__steps = steps
+
+        self.__buffer_size = buffer_mb * 1048576 #Mb to B
 
         self.__box = None
         self.__lengths = None
@@ -97,6 +99,15 @@ class BASE():
     def get_num_each_type(self):
         return self.__num_each_type
 
+    def _get_line_iterator(self, f):
+        if self.__buffer_size <= 0:
+            for line in f:
+                yield line
+        else:
+            while lines := f.readlines(self.__buffer_size):
+                for line in lines:
+                    yield line
+
     def parse_file(self):
         self.verbose_print(f"Peeking at trajectory file: {self.__trajectory}", verbosity = 2)
 
@@ -132,7 +143,7 @@ class BASE():
             start, stop, step = utils.parse_frame_pattern(self.__steps)
 
         with open(self.__trajectory, "r") as f:
-            for line in f:
+            for line in self._get_line_iterator(f):
                 if "ITEM: TIMESTEP" in line:
                     if read_atoms and len(atom_lines) > 0:
                         self._postprocess(atom_lines)
