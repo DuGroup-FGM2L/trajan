@@ -27,7 +27,7 @@ def parse_args():
 
     parser.add_argument("-s", "--steps", help = "Frame selection pattern (e.g., '10:' or '0:1000:10'). Default: ::1", type = str, default = "::1")
 
-    parser.add_argument("-b", "--buffer", help = "Maximum allowed per-core RAM in Mb. No buffer given corresponds to line by line file reading. Default: {constants.DEFAULT_BUFFER_MB}", type = int, default = constants.DEFAULT_BUFFER_MB)
+    parser.add_argument("-b", "--buffer", help = f"Maximum allowed per-core RAM in Mb. No buffer given corresponds to line by line file reading. Default: {constants.DEFAULT_BUFFER_MB}", type = int, default = constants.DEFAULT_BUFFER_MB)
 
     subparsers = parser.add_subparsers(dest="command", required = True, metavar = "analyzer", action = utils.StrictSubParsersAction)
 
