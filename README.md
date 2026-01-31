@@ -14,6 +14,7 @@ LAMMPS trajectory analysis utility for [LAMMPS](https://lammps.sandia.gov), deve
     - **Q-unit**: Network connectivity analysis ($Q^n$ distribution)
     - **RDF**: Partial radial distribution functions and Neutron Total Correlation Functions ($T(r)$)
     - **Rings**: Primitive and Smallest ring size distribution analysis
+    - **vDOS**: Vibrational Density of States Calculation
 - **Experimental comparison**: Includes Lorch window broadening for $T(r)$ to match experimental $Q_{max}$
 - **Modular design**: New analysis methods can be added as handler classes
 
@@ -54,6 +55,8 @@ pip install -e .
 
 ## 🥪 Usage
 
+**DISCLAMER**: This usage manual is compressed. For more details refer to the help (`-h/--help`) options of the handlers.
+
 The general syntax involves providing the trajectory file first, followed by the specific analyzer command:
 
 ```bash
@@ -68,6 +71,10 @@ Calculates the system density over the trajectory. You must provide the atomic m
 trajan glass_melt.lammpstrj density Si O Na
 ```
 
+**Options:**
+- `elements`:  Space separated list of element names for each type present in the trajectory file. In case a custom mass has been used a numerical value canbe specified.
+- `-u` / `--units`: LAMMPS unit set for conversion.
+
 ---
 
 ### 2. Bond Angle Distribution (`angle`)
@@ -77,6 +84,11 @@ Calculates the distribution of bond angles for a specified triplet of atom types
 ```bash
 trajan glass_melt.lammpstrj angle 1 2 1 -c 1.8 1.8 -b 500
 ```
+
+**Options:**
+- `types`:  Integer values representing atomic types of a bonded triplet with the atom of second type in the middle.
+- `-c` / `--cutoffs`: Maximum distances allowed for nearest species of a triplet to be considered bonded.
+- `-b` / `--bincount`: Number of bins for the bond angle histogram.
 
 ---
 
@@ -88,6 +100,10 @@ Calculates the distribution of $Q^n$ species. The input requires a list of "Form
 trajan silica.lammpstrj qunit 1 0 2 -c 1.8
 ```
 
+**Options:**
+- `types`:  Integer values representing atomic types of network formers and connectors separated by a zero.
+- `-c` / `--cutoffs`: Maximum distances between each former and connector (in Angstroms) for them to be considered bonded.
+
 ---
 
 ### 4. Radial Distribution Functions (`rdf`)
@@ -97,6 +113,14 @@ Calculates partial Radial Distribution Functions $g(r)$ and the Neutron Total Co
 ```bash
 trajan glass.lammpstrj rdf -t Si O Na -br 25.0
 ```
+
+**Options:**
+- `-c` / `--cutoffs`: Maximum atomic separation distance considered for the generation of the radial distribution functions.
+- `-p` / `--pair`: Atomic type pairs for selecting specific partial distribution functions.
+- `-b` / `--bincount`: Number of bins for the radial distribution functions.
+- `-bs` / `--batch-size`: Number of atoms whose neighbors are analyzed at a time.
+- `-t` / `--total`: Calculate the total correlation function based on the atom type mappings or custom neutron scattering lengths.
+- `-b` / `--broaden`: When this flag is the idealized total correlation function is broadened to match experimental results.
 
 ---
 
@@ -119,6 +143,23 @@ trajan glass.lammpstrj rings 1 0 2 -c 1.8 -m 12 -a p
 - `-a` / `--algorithm`: Algorithm choice: `p` for Primitive or `s` for Smallest rings.
 - '-p' / `--paral-mode`: Parallelization choice: `a` for atoms or `f` for frame based (not yet implemented).
 
+### 5. Vibrational Density of States (`vdos`)
+Combines the per-atom velocity data of a simulation to generate the vibrational frequency analysis.
+
+**Example:**
+```bash
+trajan glass.lammpstrj vdos 0.05 -m 100 -t 0.05
+```
+
+**Options:**
+- `timestep`: Difference in simulation time between recorded timesteps.
+- `-m` / `--max_timelag`: Maximum velocity autocorrelation function time difference in simulation units.
+- `-u` / `--units`: LAMMPS unit set for conversion.
+- `-l` / `--lag-step`: Velocity autocorrelation function resolution in simulation time units.
+- `-t` / `--taper`: Fraction of velocity autocorrelation function to be tapered down to 0 for a clean FFT.
+- `-p` / `--padding`: End zero padding size as a fraction of velocity autocorrelation length.
+
+
 ## 📚 Documentation
 
 All subcommands support `-h` or `--help` flags for detailed usage:
@@ -139,6 +180,7 @@ The project follows a modular "Handler" architecture:
     - `qunit.py`: Network topology analysis.
     - `rdfs.py`: Pairwise distances and Fourier transform logic.
     - `rings.py`: Graph-based ring searching using BFS and shortest path algorithms.
+    - `vdos.py`: Velocity autocorrelation function calculator + FFT
 
 ## 🥪 Development
 

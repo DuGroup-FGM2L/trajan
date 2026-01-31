@@ -75,7 +75,7 @@ def parse_args():
 
 
     vdos = subparsers.add_parser("vdos", help = "Argument parser for the vibrational density of states (vDOS) calculation from LAMMPS-generated trajectory files.", formatter_class = utils.NoMetavarHelpFormatter)
-    vdos.add_argument("timestep", type = float, help = "Difference in simulation time between recorded timesteps. Comment: This is rarely simulation timestep. Default: {constants.DEFAULT_TIMESTEP_NUM}", default = constants.DEFAULT_TIMESTEP_NUM)
+    vdos.add_argument("timestep", type = float, help = f"Difference in simulation time between recorded timesteps. Comment: This is rarely simulation timestep. Default: {constants.DEFAULT_TIMESTEP_NUM}", default = constants.DEFAULT_TIMESTEP_NUM)
     vdos.add_argument("-m", "--max-timelag", type = float, help = "Maximum velocity autocorrelation function time difference in simulation units. Default: MaxTime", default = np.inf)
     vdos.add_argument("-u", "--units", type = str, help = f"LAMMPS unit set for conversion. Default: {constants.DEFAULT_UNITS}.", default = constants.DEFAULT_UNITS)
     vdos.add_argument("-l", "--lag-step", type = int, help = f"Velocity autocorrelation function resolution in simulation time units. Default: timestep", default = None)
