@@ -59,7 +59,7 @@ class DENSITY(BASE):
 
     def write(self):
 
-        super().write(data = np.column_stack((np.arange(1, self.get_user_frame()), self.get_timesteps(), self.densities)),
+        super().write(data = np.column_stack((np.arange(1, self.get_user_frame() + 1), self.get_timesteps(), self.densities)),
                       header = "frame, time step, density",
                       outfile = self.outfile,
                       )

@@ -63,7 +63,7 @@ class RDFS(BASE):
         self.batch_size = args.batch_size
 
         self.broaden = False
-        if hasattr(args, "broaden"):
+        if args.broaden:
             if not self.calc_total:
                 self.verbose_print("WARNING: Broadening of the total correlation function requested, without the request for T(r) itself. This will be ignored.\n")
             else:

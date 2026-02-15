@@ -105,7 +105,7 @@ class QUNIT(BASE):
             unique_ids, counts = np.unique(bridging_neighs, return_counts = True)
             all_coordinations.append(counts)
 
-            self.verbose_print(f"{frame_idx + 1} analysis of TS {self.get_timestep()}", verbosity = 2)
+            self.verbose_print(f"{frame_idx} analysis of TS {self.get_timestep()}", verbosity = 2)
 
         self.all_coordinations = np.concatenate(all_coordinations)
         unique_coords, counts = np.unique(self.all_coordinations, return_counts = True)
