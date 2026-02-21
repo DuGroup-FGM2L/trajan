@@ -13,7 +13,7 @@ from trajan import constants
 from trajan import utils
 
 class BASE():
-    def __init__(self, filename, verbosity, steps, buffer_mb, paral_frame = True):
+    def __init__(self, filename, verbosity, steps, buffer_mb, filter_type, paral_frame = True):
         self.__trajectory = filename
         self.__verbosity = verbosity
         self.__steps = steps
@@ -29,6 +29,8 @@ class BASE():
         self.__num_each_type = None
 
         self.__atomic_data = None
+
+        self.__type_blacklist = filter_type
 
         #General data
         self.__columns = dict()
@@ -142,6 +144,7 @@ class BASE():
         self.__timesteps = list()
 
 
+
         if run_once:
             start, stop, step = 0, 1, 1
         else:
@@ -179,6 +182,7 @@ class BASE():
 
                 elif "ITEM: NUMBER OF ATOMS" in line and record_this_step:
                     read_natoms = True
+                    self.__filtered_atoms_num = 0
                 elif read_natoms:
                     natoms = int(line.strip())
                     self.__natoms = natoms
@@ -204,13 +208,16 @@ class BASE():
                         self.__num_each_type = dict()
                 elif read_atoms:
                     split_line = np.fromstring(line, sep = " ")
-                    atom_lines.append(split_line)
-                    if count_per_type:
-                        cur_type = int(split_line[self.__columns["type"]])
-                        if not cur_type in self.__num_each_type:
-                            self.__num_each_type[cur_type] = 1
-                        else:
-                            self.__num_each_type[cur_type] += 1
+                    if "type" in self.__columns and int(split_line[self.__columns["type"]]) not in self.__type_blacklist:
+                        atom_lines.append(split_line)
+                        if count_per_type:
+                            cur_type = int(split_line[self.__columns["type"]])
+                            if not cur_type in self.__num_each_type:
+                                self.__num_each_type[cur_type] = 1
+                            else:
+                                self.__num_each_type[cur_type] += 1
+                    else:
+                        self.__filtered_atoms_num += 1
 
 
         if len(atom_lines) > 0:
@@ -224,6 +231,7 @@ class BASE():
         self.verbose_print(f"\nTrajectory file ({self.__trajectory}) scan complete.\n")
 
     def _postprocess(self, atom_lines):
+        self.__natoms -= self.__filtered_atoms_num
         self.__atomic_data = np.array(atom_lines)
 
         self.__lengths = self.__box[:, 1] - self.__box[:, 0]

@@ -29,6 +29,8 @@ def parse_args():
 
     parser.add_argument("-b", "--buffer", help = f"Maximum allowed per-core RAM in Mb. No buffer given corresponds to line by line file reading. Default: {constants.DEFAULT_BUFFER_MB}", type = int, default = constants.DEFAULT_BUFFER_MB)
 
+    parser.add_argument("-f", "--filter-type", help = "Integer value corresponding to the type of an atom NOT to be considered Note: If several atom types need to be discarded include the argument for each type. Default: None", action = "append", default = [], type = int)
+
     subparsers = parser.add_subparsers(dest="command", required = True, metavar = "analyzer", action = utils.StrictSubParsersAction)
 
     bond_angle = subparsers.add_parser("angle", help = "Argument parser for extracting bond angle distributions from LAMMPS-generated trajectory files.", epilog = "Verbosity Controls:\n   1 : File scan and analysis messages\n       Mean bond angle and standard deviation\n   2 : Frame scan and analysis messages\n   3 : Peak position and fraction of species analysis", formatter_class = utils.NoMetavarHelpFormatter)

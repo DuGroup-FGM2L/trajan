@@ -9,7 +9,7 @@ import scipy.spatial
 
 class RDFS(BASE):
     def __init__(self, args):
-        super().__init__(args.file, args.verbose, args.steps, args.buffer)
+        super().__init__(args.file, args.verbose, args.steps, args.buffer, args.filter_type)
 
         self.cutoff = args.cutoff
         self.cutsq = self.cutoff**2

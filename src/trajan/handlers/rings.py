@@ -13,7 +13,7 @@ except ImportError:
 class RINGS(BASE):
     def __init__(self, args):
         paral_frame = not args.paral_mode.lower().startswith("a")
-        super().__init__(args.file, args.verbose, args.steps, args.buffer, paral_frame = paral_frame)
+        super().__init__(args.file, args.verbose, args.steps, args.buffer, args.filter_type, paral_frame = paral_frame)
 
 
         self.comm = self.get_comm()

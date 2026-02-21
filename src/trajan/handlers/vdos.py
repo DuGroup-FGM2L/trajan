@@ -9,7 +9,13 @@ c_cm_s = constants.c * 100
 
 class VDOS(BASE):
     def __init__(self, args):
-        super().__init__(args.file, args.verbose, args.steps, args.buffer)
+        super().__init__(args.file, args.verbose, args.steps, args.buffer, args.filter_type)
+        if args.units in constants.AVAILABLE_UNITS:
+            self.units = args.units
+        else:
+            unitstr = '\n'.join(constants.AVAILABLE_UNITS)
+            self.verbose_print(f"ERROR: Unit set \"{args.units}\" is not supported. Please choose out of available unit sets: \n\n{unitstr}\n")
+            sys.exit(1)
 
 
         frame_step = self.get_frame_step()
