@@ -68,7 +68,7 @@ class VDOS(BASE):
                 self.autocount.append(0)
 
             current_velocities = self.extract_columns("vx", "vy", "vz")
-            current_masses = self.extract_column("mass")
+            current_masses = self.extract_columns("mass").T[0]
             self.history.append(current_velocities)
 
             for tau, past_velocities in enumerate(reversed(self.history)):
@@ -119,6 +119,9 @@ class VDOS(BASE):
 
         #Conversion from Hz to cm^-1
         self.frequencies = np.fft.rfftfreq(self.padding_total, d = self.timestep * self.lag_step) / c_cm_s
+
+        area = np.trapz(self.vDOS, self.frequencies)
+        self.vDOS / area
 
     def write(self):
 

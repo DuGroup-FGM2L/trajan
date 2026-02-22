@@ -216,7 +216,7 @@ class RDFS(BASE):
             oscillations = self.T_r - T_0
 
             if self.calc_scatter:
-                self.q_grid = np.arange(0.01, self.sQmax + self.dq, self.dq)
+                self.q_grid = np.arange(2 * np.pi / self.cutoff, self.sQmax + self.dq, self.dq)
 
                 Q_2d = self.q_grid[:, np.newaxis]
                 r_2d = self.edges[np.newaxis, :]
@@ -225,7 +225,7 @@ class RDFS(BASE):
                 integral = scipy.integrate.simpson(integrand, x=self.edges, axis=-1)
 
                 self.i_Q = integral / self.q_grid
-                self.S_Q = 1.0 + (self.i_Q / 0.01 * (average_scat**2))
+                self.S_Q = 1.0 + (self.i_Q / (0.01 * (average_scat**2)))
 
             #Lorch Broadening
             if self.broaden:
