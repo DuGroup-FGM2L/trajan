@@ -12,7 +12,7 @@ build-backend = "hatchling.build"
 ###############################################################################
 [project]
 name            = "lammps-trajan"
-version         = "0.0.12"
+version         = "0.0.13"
 description     = "LAMMPS trajectory file analysis utility"
 readme          = "README.md"
 requires-python = ">=3.6"
