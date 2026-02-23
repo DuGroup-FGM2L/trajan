@@ -21,7 +21,6 @@ class FTIR(BASE):
 
         frame_step = self.get_frame_step()
         self.timestep = args.timestep * frame_step
-        self.max_timelag = int(args.max_timelag / self.timestep)
         if args.lag_step is None:
             self.lag_step = constants.DEFAULT_LAG_STEP
         else:
@@ -46,8 +45,9 @@ class FTIR(BASE):
 
         self.parse_file()
 
-        self.correct_QM = args.quantum_correction
-        self.sim_temp = args.temperature
+        self.correct_QM = not (args.quantum_correction is None)
+        if self.correct_QM:
+            self.sim_temp = args.quantum_correction
 
         self.check_required_columns("q", "vx", "vy", "vz")
 
@@ -58,6 +58,7 @@ class FTIR(BASE):
         velocities = list()
         finite_cap = self.max_timelag != np.inf
         if finite_cap:
+            self.max_timelag = int(args.max_timelag / self.timestep)
             max_storage = int(self.max_timelag // self.lag_step) + 1
             self.autocorrel = np.zeros(shape = (max_storage, ))
             self.autocount = np.zeros(shape = (max_storage, ))
