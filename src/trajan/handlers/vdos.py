@@ -121,7 +121,7 @@ class VDOS(BASE):
         self.frequencies = np.fft.rfftfreq(self.padding_total, d = self.timestep * self.lag_step) / c_cm_s
 
         area = np.trapz(self.vDOS, self.frequencies)
-        self.vDOS / area
+        self.vDOS /= area
 
     def write(self):
 
