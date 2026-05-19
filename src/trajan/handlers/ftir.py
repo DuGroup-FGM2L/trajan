@@ -18,6 +18,8 @@ class FTIR(BASE):
             self.verbose_print(f"ERROR: Unit set \"{args.units}\" is not supported. Please choose out of available unit sets: \n\n{unitstr}\n")
             sys.exit(1)
 
+        self.DOF_correction = args.degrees_of_freedom
+
 
         frame_step = self.get_frame_step()
         self.timestep = args.timestep * frame_step
@@ -26,6 +28,7 @@ class FTIR(BASE):
         else:
             self.lag_step = int(args.lag_step * frame_step / self.timestep)
 
+        self.max_timelag = int(args.max_timelag / self.timestep)
 
         if self.lag_step < 1:
             print(f"ERROR: The charge flux autocorrelation function resolution ({args.lag_step}) cannot be smaller than the time between frames ({args.timestep}).")
@@ -43,6 +46,7 @@ class FTIR(BASE):
         else:
             self.padding_total = 1 / (c_cm_s * args.resolution * self.timestep * self.lag_step)
 
+
         self.parse_file()
 
         self.correct_QM = not (args.quantum_correction is None)
@@ -58,7 +62,7 @@ class FTIR(BASE):
         velocities = list()
         finite_cap = self.max_timelag != np.inf
         if finite_cap:
-            self.max_timelag = int(args.max_timelag / self.timestep)
+            self.max_timelag = int(self.max_timelag)
             max_storage = int(self.max_timelag // self.lag_step) + 1
             self.autocorrel = np.zeros(shape = (max_storage, ))
             self.autocount = np.zeros(shape = (max_storage, ))
@@ -67,6 +71,8 @@ class FTIR(BASE):
 
         self.history = deque(maxlen = self.max_timelag)
 
+        temp_sum = 0
+
         for frame_idx in self.trajectory_reader():
             if not finite_cap:
                 self.autocorrel.append(0)
@@ -74,8 +80,21 @@ class FTIR(BASE):
 
             current_velocities = self.extract_columns("vx", "vy", "vz")
             current_charges = self.extract_columns("q")
+            current_masses = self.extract_columns("mass").T[0]
+            com_vel = np.average(current_velocities, axis=0, weights=current_masses)
+            current_velocities -= com_vel
             current_flux = np.sum(current_charges * current_velocities, axis = 0)
             self.history.append(current_flux)
+
+            #Calculating system temperature
+            Ndof = 3 * (self.get_natoms() * abs(self.DOF_correction)) - 3
+            T = np.einsum("i,ij,ij->", current_masses, current_velocities, current_velocities) / (constants.kB * Ndof)
+            #Unit conversion
+            T *= (constants.MASS_CONVERSIONS[self.units] / 1000)# -> kg
+            T *= ((constants.DISTANCE_CONVERSIONS[self.units] / 100)**2) # -> m
+            T /= (constants.TIMESTEPS[self.units]**2) # -> s
+            temp_sum += T
+
 
             for tau, past_velocities in enumerate(reversed(self.history)):
                 if tau % self.lag_step:
@@ -90,6 +109,8 @@ class FTIR(BASE):
             self.verbose_print(f"{frame_idx} analysis of TS {self.get_timestep()}", verbosity = 2)
 
 
+        ave_sim_T = temp_sum / self.get_user_frame()
+        kBT = constants.kB * ave_sim_T
         self.num_autocorrel_points = len(self.autocorrel)
 
         non_zeros = np.flatnonzero(self.autocount)
@@ -120,11 +141,16 @@ class FTIR(BASE):
 
         dt_seconds = self.timestep * self.lag_step
         ftir_complex = np.fft.rfft(self.tapered_autocorrel, n = self.padding_total)
-        self.ftir = ftir_complex.real
+        self.ftir = ftir_complex.real - 0.5 *self.tapered_autocorrel[0]
         self.ftir *= (dt_seconds * (constants.electron * constants.DISTANCE_CONVERSIONS[self.units] * 0.01 / constants.TIMESTEPS[self.units])**2)
 
         #Conversion from Hz to cm^-1
         self.frequencies = np.fft.rfftfreq(self.padding_total, d = dt_seconds) / c_cm_s
+
+        #10% check
+        if (abs(ave_sim_T - self.sim_temp) / self.sim_temp > 0.1) and (self.DOF_correction != -1):
+            self.verbose_print(f"COMMENT: System temperature ({round(ave_sim_T, 3)}) differs from target temperature ({self.sim_temp}) by more than 10%. Scaling will be applied.")
+            self.ftir *= (self.sim_temp / ave_sim_T)
 
         #Frequencty-dependent correction
         if self.correct_QM:
@@ -139,10 +165,18 @@ class FTIR(BASE):
         sim_volume = np.prod(self.get_lengths()) * (constants.DISTANCE_CONVERSIONS[self.units] * 0.01)**3
         self.ftir /= (sim_volume * 3 * kBT )
 
+        self.ftir -= self.ftir[0]
+
+        omega_rad_s = 2 * np.pi * self.frequencies * c_cm_s
+        imag_eps = np.zeros_like(self.ftir)
+        mask = omega_rad_s > 0
+        imag_eps[mask] = self.ftir[mask] / (constants.eps * omega_rad_s[mask])
+        self.ftir = imag_eps
+
     def write(self):
 
         super().write(data = np.column_stack((self.frequencies, self.ftir)),
-                      header = "Frequency (cm^-1), ftir",
+                      header = "Frequency (cm^-1), ImagRelPerm",
                       outfile = self.outfile,
                       )
 

@@ -69,6 +69,8 @@ class VDOS(BASE):
 
             current_velocities = self.extract_columns("vx", "vy", "vz")
             current_masses = self.extract_columns("mass").T[0]
+            com_vel = np.average(current_velocities, axis=0, weights=current_masses)
+            current_velocities -= com_vel
             self.history.append(current_velocities)
 
             for tau, past_velocities in enumerate(reversed(self.history)):
@@ -104,8 +106,9 @@ class VDOS(BASE):
         self.padding_total = int(max((self.padding_total, self.num_autocorrel_points)))
         self.padding_total = 1 << (self.padding_total - 1).bit_length()
 
-        window = np.ones(self.num_autocorrel_points)
+
         num_taper = int(self.num_autocorrel_points * self.taper_fraction)
+        window = np.ones(self.num_autocorrel_points)
         if num_taper > 0:
             x = np.linspace(0, np.pi, num_taper)
             decay = 0.5 * (1 + np.cos(x))
@@ -115,7 +118,7 @@ class VDOS(BASE):
 
         dt_seconds = self.timestep * self.lag_step
         vdos_complex = np.fft.rfft(self.tapered_autocorrel, n = self.padding_total)
-        self.vDOS = vdos_complex.real * dt_seconds
+        self.vDOS = (2 * vdos_complex.real - self.tapered_autocorrel[0])* dt_seconds
 
         #Conversion from Hz to cm^-1
         self.frequencies = np.fft.rfftfreq(self.padding_total, d = self.timestep * self.lag_step) / c_cm_s
@@ -131,7 +134,7 @@ class VDOS(BASE):
                       )
 
         if self.get_verbosity() >= 3:
-            super().write(data = np.column_stack((np.arange(0, self.num_autocorrel_points, 1) * self.timestep * self.lag_step / constants.TIMESTEPS[self.units], self.autocorrel)),
+            super().write(data = np.column_stack((np.arange(0, self.num_autocorrel_points, 1) * self.timestep * self.lag_step / constants.TIMESTEPS[self.units], self.tapered_autocorrel)),
                           header = "Time, ACF",
                           outfile = "ACF_" + self.outfile,
                           )

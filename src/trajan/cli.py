@@ -83,7 +83,7 @@ def parse_args():
     vdos.add_argument("-m", "--max-timelag", type = float, help = "Maximum velocity autocorrelation function time difference in simulation units. Default: MaxTime", default = np.inf)
     vdos.add_argument("-u", "--units", type = str, help = f"LAMMPS unit set for conversion. Default: {constants.DEFAULT_UNITS}.", default = constants.DEFAULT_UNITS)
     vdos.add_argument("-l", "--lag-step", type = float, help = f"Velocity autocorrelation function resolution in simulation time units. Default: timestep", default = None)
-    vdos.add_argument("-t", "--taper", type = int, help = f"Fraction of velocity autocorrelation function to be tapered down to 0 for a clean FFT. Default: {constants.DEFAULT_VDOS_TAPER}", default = constants.DEFAULT_VDOS_TAPER)
+    vdos.add_argument("-t", "--taper", type = float, help = f"Fraction of velocity autocorrelation function to be tapered down to 0 for a clean FFT. Default: {constants.DEFAULT_VDOS_TAPER}", default = constants.DEFAULT_VDOS_TAPER)
     vdos.add_argument("-r", "--resolution", type = int, help = f"Desired vDOS frequency resolution in cm^-1. Default: None.", default = None)
 
     vdos.set_defaults(handler_class = VDOS)
@@ -94,9 +94,10 @@ def parse_args():
     ftir.add_argument("-m", "--max-timelag", type = float, help = "Maximum charge flux autocorrelation function time difference in simulation units. Default: MaxTime", default = np.inf)
     ftir.add_argument("-u", "--units", type = str, help = f"LAMMPS unit set for conversion. Default: {constants.DEFAULT_UNITS}.", default = constants.DEFAULT_UNITS)
     ftir.add_argument("-l", "--lag-step", type = float, help = f"Charge flux autocorrelation function resolution in simulation time units. Default: timestep", default = None)
-    ftir.add_argument("-t", "--taper", type = int, help = f"Fraction of charge flux autocorrelation function to be tapered down to 0 for a clean FFT. Default: {constants.DEFAULT_VDOS_TAPER}", default = constants.DEFAULT_VDOS_TAPER)
+    ftir.add_argument("-t", "--taper", type = float, help = f"Fraction of charge flux autocorrelation function to be tapered down to 0 for a clean FFT. Default: {constants.DEFAULT_VDOS_TAPER}", default = constants.DEFAULT_VDOS_TAPER)
     ftir.add_argument("-r", "--resolution", type = int, help = f"Desired IR absorption frequency resolution in cm^-1. Note: Default: None.", default = None)
-    ftir.add_argument("-q", "--quantum-correction", help = f"Quantum-mechanical correction for high frequency mode emission. This argument when invoked takesthe simulation temperature as an input parameter. Default: False, Default T: {constants.ROOM_TEMP}", nargs = "?", const = constants.ROOM_TEMP, default = None)
+    ftir.add_argument("-q", "--quantum-correction", help = f"Quantum-mechanical correction for high frequency mode emission. This argument when invoked takesthe simulation temperature as an input parameter. Default: False, Default T: {constants.ROOM_TEMP}", nargs = "?", const = constants.ROOM_TEMP, default = None, type = float)
+    ftir.add_argument("-df", "--degrees-of-freedom", help = f"Scaling factor to the DOF calculation (3 * (Natoms * (|FACTOR|)) - 3) used for accounting for bonded species. When given a value of -1 no temperature scaling will be performed. Default: -1", type = float, default = -1)
 
 
     ftir.set_defaults(handler_class = FTIR)
