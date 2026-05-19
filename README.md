@@ -177,6 +177,8 @@ trajan glass.lammpstrj ftir 0.05 -m 100 -t 0.05
 - `-t` / `--taper`: Fraction of total charge flux autocorrelation function to be tapered down to 0 for a clean FFT.
 - `-r` / `--resolution`: Desired vDOS frequency resolution in cm^-1.
 - `-q` / `--quantum-coorection`: Quantum-mechanical correction for high frequency mode emission.
+- `-df` , `--degrees-of-freedom` : Scaling factor for DOF calculation for temperature evaluation.
+
 
 
 ## 📚 Documentation
