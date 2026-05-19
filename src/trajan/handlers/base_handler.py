@@ -193,7 +193,8 @@ class BASE():
 
                     elif read_timestep:
                         self.__timestep = int(line.strip())
-                        self.verbose_print(f"{self.__frame - 1} scan of TS {self.__timestep}", verbosity = 2)
+                        if not run_once:
+                            self.verbose_print(f"{self.__frame - 1} scan of TS {self.__timestep}", verbosity = 2)
                         read_timestep = False
 
                     elif "ITEM: NUMBER OF ATOMS" in line and record_this_step:
@@ -250,19 +251,19 @@ class BASE():
                                     return
 
                             read_atoms = 0
-                            self.__frame += 1
                             self.__natoms = int(splt[0])
                             self.__filtered_atoms_num = 0
                             box_lines = list()
+                            self.__box = None
 
                             record_this_step = (self.__frame >= start) and (self.__frame < stop) and ((self.__frame - start) % step == 0)
-                            if not record_this_step:
-                                read_timestep = False
-                            else:
+                            if record_this_step:
                                 self.__user_frame += 1
 
                             self.__frame += 1
                             self.__timestep = self.__frame
+                            if not run_once:
+                                self.verbose_print(f"{self.__frame - 1} scan of TS {self.__timestep}", verbosity = 2)
 
                         elif len(splt) == 4 and (self.__box is None):
                             try:
@@ -407,7 +408,13 @@ class BASE():
         kdtree = sp.spatial.cKDTree(neighs, boxsize = box)
         norms, idx = kdtree.query(central, k = N)
 
-        return norms, idx
+    def get_within(self, central, neighs, cut, use_pbc = True):
+        box = self.__lengths if use_pbc else None
+        kdtree = sp.spatial.cKDTree(neighs, boxsize = box)
+        idx = kdtree.query_ball_point(central, r = cut)
+
+
+        return idx
 
     def write(self, data = None, header = None, outfile = None):
         if self.__rank != 0:

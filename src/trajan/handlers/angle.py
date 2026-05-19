@@ -1,8 +1,11 @@
 from .base_handler import BASE
 from trajan import constants
+import pandas as pd
 import numpy as np
 import scipy as sp
 import scipy.integrate
+
+import sys
 
 class ANGLE(BASE):
     def __init__(self, args):
@@ -60,13 +63,21 @@ class ANGLE(BASE):
             #If types are the same first and second neighbors are needed
             if self.types[0] == self.types[2]:
                 neighs2 = neighs1
-                norms, idx = self.get_nclosest(
+                idx = self.get_within(
                         central = central_atoms,
                         neighs = neighs1,
-                        N = 2,
+                        cut = max(self.cutoffs[0], self.cutoffs[1]),
                         )
-                norms1, norms2 = norms.T
-                idx1, idx2 = idx.T
+
+                neighbor_frame = pd.DataFrame({
+                    "neigh_idx" : idx
+                })
+                neighbor_frame = neighbor_frame.explode("neigh_idx")
+                try:
+                    pair_frame = neighbor_frame.merge(neighbor_frame, left_index = True, right_index = True, suffixes = ("_1", "_2")).query("neigh_idx_1 < neigh_idx_2")
+                except MemoryError:
+                    self.verbose_print(f"ERROR: Not enough memory for pairwise neighborlist generation. The cutoff ({self.cutoffs[0]}) is too large.")
+                    sys.exit(1)
 
             #If types are different first neighbor of each type is needed
             else:
@@ -76,34 +87,51 @@ class ANGLE(BASE):
                         ),
                     )
 
-                norms1, idx1 = self.get_nclosest(
+                idx1 = self.get_within(
                         central = central_atoms,
                         neighs = neighs1,
-                        N = 1,
+                        cut = self.cutoffs[0],
                         )
 
-                norms2, idx2 = self.get_nclosest(
+                idx2 = self.get_within(
                         central = central_atoms,
                         neighs = neighs2,
-                        N = 1,
+                        cut = self.cutoffs[1],
                         )
 
-            #Check against cutoffs
-            below = (norms1 < self.cutoffs[0]) * (norms2 < self.cutoffs[1])
 
-            norms1 = norms1[below]
-            norms2 = norms2[below]
-            idx1 = idx1[below]
-            idx2 = idx2[below]
+                neigh_frame1 = pd.DataFrame({
+                    "neigh_idx" : idx1
+                })
+                neigh_frame1 = neigh_frame1.explode("neigh_idx")
+
+                neigh_frame2 = pd.DataFrame({
+                    "neigh_idx" : idx2
+                })
+                neigh_frame2 = neigh_frame2.explode("neigh_idx")
+
+                try:
+                    pair_frame = neigh_frame1.merge(neigh_frame2, left_index = True, right_index = True, suffixes = ("_1", "_2"))
+                except MemoryError:
+                    self.verbose_print(f"ERROR: Not enough memory for pairwise neighborlist generation. One of the cutoffs ({self.cutoffs[0]}, {self.cutoffs[1]}) is too large.")
+                    sys.exit(1)
+
+            central_idx = pair_frame.index.values.astype(int)
+            idx1 = pair_frame["neigh_idx_1"].values.astype(int)
+            idx2 = pair_frame["neigh_idx_2"].values.astype(int)
 
             #Get displacements between central atoms and each of their nearest neighbors
-            displ1 = neighs1[idx1] - central_atoms[below]
-            displ2 = neighs2[idx2] - central_atoms[below]
+            displ1 = neighs1[idx1] - central_atoms[central_idx]
+            displ2 = neighs2[idx2] - central_atoms[central_idx]
 
             #Account for periodic boundaries
             lengths = self.get_lengths()
             displ1 -= lengths * np.round(displ1 / lengths)
             displ2 -= lengths * np.round(displ2 / lengths)
+
+            #Calculate vector norms
+            norms1 = np.linalg.norm(displ1, axis = 1)
+            norms2 = np.linalg.norm(displ2, axis = 1)
 
 
             dotproduct = np.sum(displ1 * displ2, axis=1)
@@ -127,6 +155,7 @@ class ANGLE(BASE):
     def statistics(self):
         counts, edges = np.histogram(self.bond_angles, bins = self.bincount)
         centers = 0.5 * (edges[:-1] + edges[1:])
+        counts = counts / self.get_user_frame()
         self.angle_hist = np.column_stack([centers, counts])
 
         hist_min = np.min(centers)
