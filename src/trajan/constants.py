@@ -70,4 +70,5 @@ electron = 1.602e-19
 
 
 DATAFILE_COLUMNS = {"charge" : ["id", "type", "charge", "x", "y", "z", "ix", "iy", "iz"],
+                    "full" : ["id", "mol-id", "type", "charge", "x", "y", "z", "ix", "iy", "iz"],
                     }

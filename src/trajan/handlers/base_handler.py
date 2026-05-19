@@ -264,7 +264,7 @@ class BASE():
                             self.__frame += 1
                             self.__timestep = self.__frame
 
-                        elif len(splt) == 4:
+                        elif len(splt) == 4 and (self.__box is None):
                             try:
                                 lo = float(splt[0])
                                 hi = float(splt[1])
