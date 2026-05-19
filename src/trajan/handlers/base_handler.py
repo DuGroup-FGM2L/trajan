@@ -408,6 +408,8 @@ class BASE():
         kdtree = sp.spatial.cKDTree(neighs, boxsize = box)
         norms, idx = kdtree.query(central, k = N)
 
+        return norms, idx
+
     def get_within(self, central, neighs, cut, use_pbc = True):
         box = self.__lengths if use_pbc else None
         kdtree = sp.spatial.cKDTree(neighs, boxsize = box)
