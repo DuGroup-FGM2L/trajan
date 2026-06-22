@@ -9,7 +9,7 @@ import sys
 
 class ANGLE(BASE):
     def __init__(self, args):
-        super().__init__(args.file, args.verbose, args.steps, args.buffer, args.filter_type)
+        super().__init__(args)
 
         self.types = args.types
         self.outfile = args.outfile

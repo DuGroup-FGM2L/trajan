@@ -3,7 +3,8 @@ import numpy as np
 from scipy.spatial import cKDTree
 import argparse
 
-from .handlers import ANGLE, QUNIT, DENSITY, RDFS, RINGS, VDOS, FTIR
+from .handlers import __all__ as HANDLERS_ALL
+from .handlers import *
 
 from . import constants
 from . import utils
@@ -11,15 +12,9 @@ from . import utils
 
 
 def parse_args():
-    KNOWN_COMMANDS = {"angle", "qunit", "density", "rdf", "rings", "vdos", "ftir"}
-    DUMMY_FILE = "__MISSING_FILE__"
+    parser = utils.ErrorHandlingParser(prog = "trajan", formatter_class = utils.NoMetavarHelpFormatter, known_subparsers = {cmd.lower() for cmd in HANDLERS_ALL})
 
-    if len(sys.argv) > 1 and sys.argv[1] in KNOWN_COMMANDS:
-        sys.argv.insert(1, DUMMY_FILE)
-
-    parser = utils.ErrorHandlingParser(prog = "trajan", formatter_class = utils.NoMetavarHelpFormatter)
-
-    parser.add_argument("file", help = "LAMMPS trajectory file to be analized.", type = str)
+    parser.add_argument("files", help = "LAMMPS trajectory file(s) to be analized.", type = str, nargs = "+")
 
     parser.add_argument("-v", "--verbose", help = f"Screen log verbosity (1 - {constants.MAX_VERBOSITY}). Default: {constants.DEFAULT_VERBOSITY}", type = utils.verbosity_type(), default = constants.DEFAULT_VERBOSITY)
 
@@ -68,7 +63,7 @@ def parse_args():
     pair_distribution.add_argument("-br", "--broaden", type = float, help = "When this flag is the idealized total correlation function is broadened to match experimental results. The value of the maximum momentum transfer Q_max should be provided in inverse angstroms for broadening.", default = False)
     pair_distribution.add_argument("-s", "--scatter", type = float, help = "Calculate the structure factor S(Q) and interference function i(Q). Accepts up to two optional value: dq (momentum resolution) and Qmax (maximum momentum transfer).", default = None, nargs = "*")
     pair_distribution.add_argument("-sp", "--scatter-partial", type = float, help = "Calculate the structure factor S(Q) and interference function i(Q) as their as the pairwise contributions to both. Accepts up to two optional value: dq (momentum resolution) and Qmax (maximum momentum transfer).", default = None, nargs = "*")
-    pair_distribution.set_defaults(handler_class = RDFS)
+    pair_distribution.set_defaults(handler_class = RDF)
 
     ring_size = subparsers.add_parser("rings", help = "Argument parser for ring size distribution calculation from LAMMPS-generated trajectory files.", epilog = "Verbosity Controls:\n   1 : File scan and analysis messages\n       Average ring size\n   2 : Frame scan and analysis messages\n   3 : In-frame ring analysis percentage", formatter_class = utils.NoMetavarHelpFormatter)
     ring_size.add_argument("types", nargs = "+", type = int, default = [], help = "Integer values representing atomic types of base and connector atoms separated by a zero. Exmaple of input: 1 2 3 0 4 5; here atoms of types 1, 2, and 3 are considered base and atoms of types 4 and 5 are considered connectors.")
@@ -105,9 +100,6 @@ def parse_args():
     ftir.set_defaults(handler_class = FTIR)
 
     args = parser.parse_args()
-
-    if args.file == DUMMY_FILE:
-        parser.error("the following arguments are required: file")
 
     return args
 

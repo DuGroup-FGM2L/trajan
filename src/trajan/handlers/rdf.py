@@ -7,9 +7,9 @@ import scipy.signal
 import scipy.integrate
 import scipy.spatial
 
-class RDFS(BASE):
+class RDF(BASE):
     def __init__(self, args):
-        super().__init__(args.file, args.verbose, args.steps, args.buffer, args.filter_type)
+        super().__init__(args)
 
         self.cutoff = args.cutoff
         self.cutsq = self.cutoff**2

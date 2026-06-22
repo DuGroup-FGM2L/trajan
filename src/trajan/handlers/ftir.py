@@ -9,7 +9,7 @@ c_cm_s = constants.c * 100
 
 class FTIR(BASE):
     def __init__(self, args):
-        super().__init__(args.file, args.verbose, args.steps, args.buffer, args.filter_type)
+        super().__init__(args)
 
         if args.units in constants.AVAILABLE_UNITS:
             self.units = args.units

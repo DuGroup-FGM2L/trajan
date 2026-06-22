@@ -47,13 +47,49 @@ class NoMetavarHelpFormatter(argparse.RawDescriptionHelpFormatter):
 
 
 class ErrorHandlingParser(argparse.ArgumentParser):
-    def __init__(self, *args, **kwargs):
+    DUMMY_FILE = "__MISSING_FILE__"
+    def __init__(self, known_subparsers = None, *args, **kwargs):
             super().__init__(*args, **kwargs)
+            self.known_subparsers = known_subparsers or set()
 
     def error(self, message):
         sys.stderr.write("\n\nERROR: %s\n\n" % message)
         self.print_help()
         sys.exit(2)
+
+    def parse_args(self, args = None, namespace = None):
+        if args is None:
+            args = sys.argv[1:]
+        if not self.known_subparsers or not args:
+            return super().parse_args(args, namespace)
+
+        cmd_idx = 0
+        num_args_total = len(args)
+        found = False
+        while cmd_idx < num_args_total and not found:
+            if args[cmd_idx] in self.known_subparsers or args[cmd_idx][0] == "-":
+                found = True
+            else:
+                cmd_idx += 1
+
+        if cmd_idx == 0:
+            args.insert(0, self.DUMMY_FILE)
+            cmd_idx = 1
+        elif cmd_idx == -1:
+            cmd_idx = len(args)
+
+        for action in self._actions:
+            if action.dest == "files":
+                action.nargs = cmd_idx
+                break
+
+        parsed = super().parse_args(args, namespace)
+
+        if len(parsed.files) == 1 and parsed.files[0] == self.DUMMY_FILE:
+            self.error("the following arguments are required: file")
+
+        return parsed
+
 
 def verbosity_type():
     def checker(value):
