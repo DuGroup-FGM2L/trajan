@@ -137,7 +137,6 @@ class BASE():
         read_natoms = False
         read_box = False
         count_per_type = False
-        read_atoms = 0
 
         data_type = None
 
@@ -157,6 +156,7 @@ class BASE():
 
         for current_file in self.__trajectories:
 
+            read_atoms = 0
             with open(current_file, "r") as f:
                 for line in self._get_line_iterator(f):
                     #If undetermined check which file is being read
@@ -169,7 +169,6 @@ class BASE():
                                 self.__input_file_type = "DATA"
                             else:
                                 continue
-
 
 
                     if self.__input_file_type == "TRAJECTORY":
